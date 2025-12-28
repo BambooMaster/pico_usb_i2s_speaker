@@ -445,16 +445,24 @@ void audio_task(void)
     if (curr_ms > start_ms)
     {
       int length =  i2s_get_queue_length();
-      int trget_level = I2S_DEQUEUE_LEN * 4;
-      uint32_t feedback = (current_sample_rate / 1000) << 16;
+      int trget_level = I2S_DEQUEUE_LEN * 5;
 
-      //Windowsの許容するフィードバック量
-      uint32_t min_feedback = (current_sample_rate / 1000 - 1) << 16;
-      uint32_t max_feedback = (current_sample_rate / 1000 + 1) << 16;
+      uint feedback = (uint32_t)(((uint64_t)current_sample_rate << 16u) / 1000u);
 
-      //i2sバッファの堆積量がtrget_levelより多いか少ないかでフィードバック値を決定する
-      if (length < trget_level) feedback = max_feedback;
-      else if (length > trget_level) feedback = min_feedback;
+      //フィードバックの最大値,最小値
+      uint feedback_max = (current_sample_rate / 1000 + 1) << 16;
+      uint feedback_min = ((current_sample_rate - 1) / 1000) << 16;
+
+      if (trget_level > length){
+        feedback = feedback + (uint32_t)((uint64_t)(trget_level - length) * (feedback_max - feedback) / trget_level);
+      }
+      else{
+        feedback = feedback - (uint32_t)((uint64_t)(length - trget_level) * (feedback - feedback_min) / trget_level);
+      }
+
+      //フィードバック値を規定の値に収める
+      if (feedback > feedback_max) feedback = feedback_max;
+      else if (feedback < feedback_min) feedback = feedback_min;
 
       tud_audio_fb_set(feedback);
       start_ms = curr_ms;

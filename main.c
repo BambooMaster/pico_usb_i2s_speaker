@@ -137,7 +137,7 @@ int main(void)
   {
     tud_task(); // TinyUSB device task
     audio_task();
-    led_blinking_task();
+    // led_blinking_task();
   }
 }
 

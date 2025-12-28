@@ -39,6 +39,7 @@
 #include "pico/stdlib.h"
 #include "hardware/clocks.h"
 #include "hardware/dma.h"
+#include "pico/multicore.h"
 
 #include "bsp/board_api.h"
 #include "tusb.h"
@@ -107,17 +108,21 @@ uint8_t current_resolution;
 
 void led_blinking_task(void);
 void audio_task(void);
+void core1_main(void);
 
 /*------------- MAIN -------------*/
 int main(void)
 {
   //uartの設定よりも前に呼び出す
-  i2s_mclk_set_config(pio0, 0, dma_claim_unused_channel(true), false, CLOCK_MODE_LOW_JITTER, MODE_I2S);
+  i2s_mclk_set_config(pio0, CLOCK_MODE_LOW_JITTER, MODE_I2S);
   board_init();
 
   //i2s init
   i2s_mclk_set_pin(18, 20, 22);
   i2s_mclk_init(current_sample_rate);
+
+  //i2s_mclk_initより後に呼び出す
+  multicore_launch_core1(core1_main);
 
   // init device stack on configured roothub port
   tud_init(BOARD_TUD_RHPORT);
@@ -427,23 +432,29 @@ void audio_task(void)
 {
   if (spk_data_size)
   {
-    i2s_enqueue(spk_buf, spk_data_size, current_resolution);
+    static int32_t buf_l[I2S_QUEUE_MAX];
+    static int32_t buf_r[I2S_QUEUE_MAX];
+
+    int length = i2s_unpack_uacdata(spk_buf, spk_data_size, current_resolution, buf_l, buf_r);
+    i2s_volume(buf_l, buf_r, length);
+    i2s_enqueue(buf_l, buf_r, length);
 
     //1ms間隔でフィードバック
     static uint32_t start_ms = 0;
     uint32_t curr_ms = board_millis();
     if (curr_ms > start_ms)
     {
-      int8_t length =  i2s_get_buf_length();
+      int length =  i2s_get_queue_length();
+      int trget_level = I2S_DEQUEUE_LEN * 4;
       uint32_t feedback = (current_sample_rate / 1000) << 16;
 
       //Windowsの許容するフィードバック量
       uint32_t min_feedback = (current_sample_rate / 1000 - 1) << 16;
       uint32_t max_feedback = (current_sample_rate / 1000 + 1) << 16;
 
-      //i2sバッファの堆積量がI2S_TARGET_LEVELより多いか少ないかでフィードバック値を決定する
-      if (length < I2S_TARGET_LEVEL) feedback = max_feedback;
-      else if (length > I2S_TARGET_LEVEL) feedback = min_feedback;
+      //i2sバッファの堆積量がtrget_levelより多いか少ないかでフィードバック値を決定する
+      if (length < trget_level) feedback = max_feedback;
+      else if (length > trget_level) feedback = min_feedback;
 
       tud_audio_fb_set(feedback);
       start_ms = curr_ms;
@@ -467,4 +478,61 @@ void led_blinking_task(void)
 
   board_led_write(led_state);
   led_state = 1 - led_state;
+}
+
+void core1_main(void){
+  int dma_sample[2];
+  bool mute = false;
+  int buf_length;
+  static int32_t dma_buff[2][I2S_DEQUEUE_LEN * 4];
+  uint8_t dma_use = 0;
+  int i2s_dma_chan = i2s_get_dma_ch();
+  I2S_MODE i2s_mode = i2s_get_i2s_mode();
+
+  int sample;
+  int32_t buf_l[I2S_DEQUEUE_LEN], buf_r[I2S_DEQUEUE_LEN];
+
+  int words_per_frame = 2;
+  if (i2s_mode == MODE_PT8211_DUAL || i2s_mode == MODE_I2S_DUAL) {
+    words_per_frame = 4;
+  }
+
+  gpio_init(PICO_DEFAULT_LED_PIN);
+  gpio_set_dir(PICO_DEFAULT_LED_PIN, GPIO_OUT);
+
+  while (1){
+    buf_length = i2s_get_queue_length();
+    // printf("%3d\n", buf_length);
+
+    if (buf_length == 0 && mute == false){
+      mute = true;
+      gpio_put(PICO_DEFAULT_LED_PIN, 0);
+    }
+    else if (buf_length >= (I2S_DEQUEUE_LEN * 2) && mute == true){
+      mute = false;
+      gpio_put(PICO_DEFAULT_LED_PIN, 1);
+    }
+
+    if (mute == false){
+      sample = i2s_dequeue(buf_l, buf_r, I2S_DEQUEUE_LEN);
+      dma_sample[dma_use] = i2s_format_piodata(buf_l, buf_r, sample, dma_buff[dma_use]);
+      if (sample < I2S_DEQUEUE_LEN){
+        for (int i = dma_sample[dma_use]; i < I2S_DEQUEUE_LEN * words_per_frame; i++){
+          dma_buff[dma_use][i] = 0;
+        }
+        mute = true;
+        gpio_put(PICO_DEFAULT_LED_PIN, 0);
+      }
+    }
+    else{
+      for (int i = 0; i < I2S_DEQUEUE_LEN * words_per_frame; i++){
+        dma_buff[dma_use][i] = 0;
+      }
+    }
+    dma_sample[dma_use] = I2S_DEQUEUE_LEN * words_per_frame;
+
+    dma_channel_wait_for_finish_blocking(i2s_dma_chan);
+    dma_channel_transfer_from_buffer_now(i2s_dma_chan, dma_buff[dma_use], dma_sample[dma_use]);
+    dma_use ^= 1;
+  }
 }

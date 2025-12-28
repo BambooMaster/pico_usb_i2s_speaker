@@ -63,6 +63,7 @@ add_subdirectory(${CMAKE_SOURCE_DIR}/lib/pico-i2s-pio)
 target_link_libraries(pico_usb_i2s_speaker
         hardware_clocks
         hardware_dma
+        pico_multicore
         tinyusb_device
         tinyusb_board
         pico-i2s-pio

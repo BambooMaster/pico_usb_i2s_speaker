@@ -3,7 +3,6 @@
  *
  * Copyright (c) 2020 Ha Thach (tinyusb.org)
  * Copyright (c) 2020 Jerzy Kasenberg
- * Copyright (c) 2025 BambooMaster
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -25,15 +24,8 @@
  *
  */
 
-/**
- * @file tusb_config.h
- * @author BambooMaster (https://misskey.hakoniwa-project.com/@BambooMaster)
- * @brief pico_usb_i2s_speaker
- * 
- */
-
-#ifndef _TUSB_CONFIG_H_
-#define _TUSB_CONFIG_H_
+#ifndef TUSB_CONFIG_H_
+#define TUSB_CONFIG_H_
 
 #ifdef __cplusplus
 extern "C" {
@@ -68,6 +60,8 @@ extern "C" {
 #define CFG_TUSB_OS           OPT_OS_NONE
 #endif
 
+// It's recommended to disable debug unless for control requests debugging,
+// as the extra time needed will impact data stream !
 #ifndef CFG_TUSB_DEBUG
 #define CFG_TUSB_DEBUG        0
 #endif
@@ -97,66 +91,71 @@ extern "C" {
 // DEVICE CONFIGURATION
 //--------------------------------------------------------------------
 
+// Expose audio class debug information via HID interface
+#ifndef CFG_AUDIO_DEBUG
+#define CFG_AUDIO_DEBUG           0
+#endif
+
 #ifndef CFG_TUD_ENDPOINT0_SIZE
 #define CFG_TUD_ENDPOINT0_SIZE    64
 #endif
 
+#define CFG_TUD_HID_EP_BUFSIZE    64
+
 //------------- CLASS -------------//
+#define CFG_TUD_AUDIO             1
+
+#if CFG_AUDIO_DEBUG
+#define CFG_TUD_HID               1
+#else
+#define CFG_TUD_HID               0
+#endif
+
 #define CFG_TUD_CDC               0
 #define CFG_TUD_MSC               0
-#define CFG_TUD_HID               0
 #define CFG_TUD_MIDI              0
-#define CFG_TUD_AUDIO             1
 #define CFG_TUD_VENDOR            0
 
 //--------------------------------------------------------------------
 // AUDIO CLASS DRIVER CONFIGURATION
 //--------------------------------------------------------------------
 
-#define CFG_TUD_AUDIO_FUNC_1_DESC_LEN                                TUD_AUDIO_HEADSET_STEREO_DESC_LEN
+#define CFG_TUD_AUDIO_FUNC_1_N_CHANNELS_RX              2
 
 // How many formats are used, need to adjust USB descriptor if changed
-#define CFG_TUD_AUDIO_FUNC_1_N_FORMATS                               3
+#define CFG_TUD_AUDIO_FUNC_1_N_FORMATS                               2
 
-// Audio format type I specifications
-/* 24bit/48kHz is the best quality for headset or 24bit/96kHz for 2ch speaker,
-   high-speed is needed beyond this */
-#define CFG_TUD_AUDIO_FUNC_1_MAX_SAMPLE_RATE                         96000
-#define CFG_TUD_AUDIO_FUNC_1_N_CHANNELS_TX                           0
-#define CFG_TUD_AUDIO_FUNC_1_N_CHANNELS_RX                           2
-
-// 16bit in 16bit slots
+// 16bit data in 16bit slots
 #define CFG_TUD_AUDIO_FUNC_1_FORMAT_1_N_BYTES_PER_SAMPLE_RX          2
 #define CFG_TUD_AUDIO_FUNC_1_FORMAT_1_RESOLUTION_RX                  16
 
-// 24bit in 24bit slots
+// 24bit data in 24bit slots
 #define CFG_TUD_AUDIO_FUNC_1_FORMAT_2_N_BYTES_PER_SAMPLE_RX          3
 #define CFG_TUD_AUDIO_FUNC_1_FORMAT_2_RESOLUTION_RX                  24
 
-// 32bit in 32bit slots
-#define CFG_TUD_AUDIO_FUNC_1_FORMAT_3_N_BYTES_PER_SAMPLE_RX          4
-#define CFG_TUD_AUDIO_FUNC_1_FORMAT_3_RESOLUTION_RX                  32
+// UAC1 Full-Speed endpoint size
+#define CFG_TUD_AUDIO_FUNC_1_MAX_SAMPLE_RATE_FS     96000
+#define CFG_TUD_AUDIO_FUNC_1_FORMAT_1_EP_OUT_SZ_FS           TUD_AUDIO_EP_SIZE(false, CFG_TUD_AUDIO_FUNC_1_MAX_SAMPLE_RATE_FS, CFG_TUD_AUDIO_FUNC_1_FORMAT_1_N_BYTES_PER_SAMPLE_RX, CFG_TUD_AUDIO_FUNC_1_N_CHANNELS_RX)
+#define CFG_TUD_AUDIO_FUNC_1_FORMAT_2_EP_OUT_SZ_FS           TUD_AUDIO_EP_SIZE(false, CFG_TUD_AUDIO_FUNC_1_MAX_SAMPLE_RATE_FS, CFG_TUD_AUDIO_FUNC_1_FORMAT_2_N_BYTES_PER_SAMPLE_RX, CFG_TUD_AUDIO_FUNC_1_N_CHANNELS_RX)
 
-// EP and buffer size - for isochronous EP´s, the buffer and EP size are equal (different sizes would not make sense)
-#define CFG_TUD_AUDIO_ENABLE_EP_OUT               1
+// UAC2 High-Speed endpoint size
+#define CFG_TUD_AUDIO_FUNC_1_MAX_SAMPLE_RATE_HS     96000
+#define CFG_TUD_AUDIO_FUNC_1_EP_OUT_SZ_HS           TUD_AUDIO_EP_SIZE(true, CFG_TUD_AUDIO_FUNC_1_MAX_SAMPLE_RATE_HS, CFG_TUD_AUDIO_FUNC_1_FORMAT_1_N_BYTES_PER_SAMPLE_RX, CFG_TUD_AUDIO_FUNC_1_N_CHANNELS_RX)
 
-#define CFG_TUD_AUDIO_FUNC_1_FORMAT_1_EP_SZ_OUT   TUD_AUDIO_EP_SIZE(CFG_TUD_AUDIO_FUNC_1_MAX_SAMPLE_RATE, CFG_TUD_AUDIO_FUNC_1_FORMAT_1_N_BYTES_PER_SAMPLE_RX, CFG_TUD_AUDIO_FUNC_1_N_CHANNELS_RX)
-#define CFG_TUD_AUDIO_FUNC_1_FORMAT_2_EP_SZ_OUT   TUD_AUDIO_EP_SIZE(CFG_TUD_AUDIO_FUNC_1_MAX_SAMPLE_RATE, CFG_TUD_AUDIO_FUNC_1_FORMAT_2_N_BYTES_PER_SAMPLE_RX, CFG_TUD_AUDIO_FUNC_1_N_CHANNELS_RX)
-#define CFG_TUD_AUDIO_FUNC_1_FORMAT_3_EP_SZ_OUT   TUD_AUDIO_EP_SIZE(CFG_TUD_AUDIO_FUNC_1_MAX_SAMPLE_RATE, CFG_TUD_AUDIO_FUNC_1_FORMAT_3_N_BYTES_PER_SAMPLE_RX, CFG_TUD_AUDIO_FUNC_1_N_CHANNELS_RX)
+#define CFG_TUD_AUDIO_FUNC_1_EP_OUT_SZ_MAX          TU_MAX(TU_MAX(CFG_TUD_AUDIO_FUNC_1_FORMAT_1_EP_OUT_SZ_FS, CFG_TUD_AUDIO_FUNC_1_FORMAT_2_EP_OUT_SZ_FS), CFG_TUD_AUDIO_FUNC_1_EP_OUT_SZ_HS)
 
-#define CFG_TUD_AUDIO_FUNC_1_EP_OUT_SW_BUF_SZ     CFG_TUD_AUDIO_FUNC_1_FORMAT_3_EP_SZ_OUT*2
-#define CFG_TUD_AUDIO_FUNC_1_EP_OUT_SZ_MAX        CFG_TUD_AUDIO_FUNC_1_FORMAT_3_EP_SZ_OUT // Maximum EP IN size for all AS alternate settings used
+// AUDIO_FEEDBACK_METHOD_FIFO_COUNT needs buffer size >= 4* EP size to work correctly
+// Example read FIFO every 1ms (8 HS frames), so buffer size should be 8 times larger for HS device
+#define CFG_TUD_AUDIO_FUNC_1_EP_OUT_SW_BUF_SZ       TU_MAX(4 * TU_MAX(CFG_TUD_AUDIO_FUNC_1_FORMAT_1_EP_OUT_SZ_FS, CFG_TUD_AUDIO_FUNC_1_FORMAT_2_EP_OUT_SZ_FS), 32 * CFG_TUD_AUDIO_FUNC_1_EP_OUT_SZ_HS)
 
-// Number of Standard AS Interface Descriptors (4.9.1) defined per audio function - this is required to be able to remember the current alternate settings of these interfaces - We restrict us here to have a constant number for all audio functions (which means this has to be the maximum number of AS interfaces an audio function has and a second audio function with less AS interfaces just wastes a few bytes)
-#define CFG_TUD_AUDIO_FUNC_1_N_AS_INT 	          2
+// Enable OUT EP
+#define CFG_TUD_AUDIO_ENABLE_EP_OUT                 1
 
-// Size of control request buffer
-#define CFG_TUD_AUDIO_FUNC_1_CTRL_BUF_SZ	64
-
-#define CFG_TUD_AUDIO_ENABLE_FEEDBACK_EP    1
+// Enable feedback EP
+#define CFG_TUD_AUDIO_ENABLE_FEEDBACK_EP            1
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* _TUSB_CONFIG_H_ */
+#endif /* TUSB_CONFIG_H_ */

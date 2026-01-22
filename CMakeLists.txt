@@ -23,10 +23,14 @@ if (EXISTS ${picoVscode})
     include(${picoVscode})
 endif()
 # ====================================================================================
-set(PICO_BOARD pico CACHE STRING "Board type")
+set(PICO_BOARD pico2 CACHE STRING "Board type")
 
 # tinyusb
 set(PICO_TINYUSB_PATH ${CMAKE_SOURCE_DIR}/lib/tinyusb)
+
+# CMSIS
+set(CMSISCORE ${CMAKE_CURRENT_SOURCE_DIR}/lib/CMSIS_5/CMSIS/Core)
+add_compile_definitions(__ARM_FEATURE_DSP=1)
 
 # Pull in Raspberry Pi Pico SDK (must be before project)
 include(pico_sdk_import.cmake)
@@ -41,6 +45,7 @@ pico_sdk_init()
 add_executable(pico_usb_i2s_speaker
         main.c
         usb_descriptors.c
+        dsp.c
         )
 
 pico_set_program_name(pico_usb_i2s_speaker "pico_usb_i2s_speaker")
@@ -61,6 +66,7 @@ target_include_directories(pico_usb_i2s_speaker PRIVATE
 )
 
 add_subdirectory(${CMAKE_SOURCE_DIR}/lib/pico-i2s-pio)
+add_subdirectory(${CMAKE_SOURCE_DIR}/lib/CMSIS-DSP)
 
 # Add any user requested libraries
 target_link_libraries(pico_usb_i2s_speaker
@@ -70,6 +76,7 @@ target_link_libraries(pico_usb_i2s_speaker
         tinyusb_device
         tinyusb_board
         pico-i2s-pio
+        CMSISDSP
         )
 
 pico_add_extra_outputs(pico_usb_i2s_speaker)

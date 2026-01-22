@@ -38,6 +38,7 @@
 #include "pico/multicore.h"
 
 #include "i2s.h"
+#include "dsp.h"
 
 //--------------------------------------------------------------------+
 // MACRO CONSTANT TYPEDEF PROTOTYPES
@@ -111,10 +112,13 @@ int main(void) {
 
   //i2s init
   i2s_mclk_set_pin(18, 20, 22);
-  i2s_mclk_init(current_sample_rate);
+  i2s_mclk_init(352800);
+
+  //dsp init
+  dsp_init();
 
   //i2s_mclk_initより後に呼び出す
-  multicore_launch_core1(core1_main);
+  multicore_launch_core1(dsp_core1_main);
 
   // init device stack on configured roothub port
   tusb_rhport_init_t dev_init = {
@@ -130,13 +134,13 @@ int main(void) {
   add_repeating_timer_us(-250, tud_timer_callback, NULL, &timer);
 
   while (1) {
-    // tud_task();// TinyUSB device task
-    //led_blinking_task();
-#if CFG_AUDIO_DEBUG
-    audio_debug_task();
-#endif
-    // audio_task();
-    busy_wait_ms(10000);
+//     tud_task();// TinyUSB device task
+//     led_blinking_task();
+// #if CFG_AUDIO_DEBUG
+//     audio_debug_task();
+// #endif
+//     audio_task();
+    dsp_core0_task();
   }
 }
 
@@ -185,7 +189,13 @@ static bool audio10_set_req_ep(tusb_control_request_t const *p_request, uint8_t 
         TU_VERIFY(p_request->wLength == 3);
 
         current_sample_rate = tu_unaligned_read32(pBuff) & 0x00FFFFFF;
-        i2s_mclk_change_clock(current_sample_rate);
+        dsp_set_freq(current_sample_rate);
+        if (current_sample_rate % 48000 == 0){
+          i2s_mclk_change_clock(384000);
+        }
+        else{
+          i2s_mclk_change_clock(352800);
+        }
 
         TU_LOG2("EP set current freq: %" PRIu32 "\r\n", current_sample_rate);
 

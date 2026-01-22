@@ -98,6 +98,12 @@ volatile uint16_t fifo_count;
 volatile uint32_t fifo_count_avg;
 #endif
 
+__isr bool __time_critical_func(tud_timer_callback)(__unused struct repeating_timer *t) {
+  tud_task();
+  audio_task();
+  return true;
+}
+
 /*------------- MAIN -------------*/
 int main(void) {
   i2s_mclk_set_config(pio0, CLOCK_MODE_LOW_JITTER, MODE_I2S);
@@ -119,14 +125,18 @@ int main(void) {
   board_init_after_tusb();
 
   TU_LOG1("Speaker running\r\n");
+  
+  struct repeating_timer timer;
+  add_repeating_timer_us(-250, tud_timer_callback, NULL, &timer);
 
   while (1) {
-    tud_task();// TinyUSB device task
+    // tud_task();// TinyUSB device task
     //led_blinking_task();
 #if CFG_AUDIO_DEBUG
     audio_debug_task();
 #endif
-    audio_task();
+    // audio_task();
+    busy_wait_ms(10000);
   }
 }
 

@@ -51,4 +51,4 @@ cmke .. && make -j4
 ```
 
 ## 対応機種
-Windows11で動作確認をしています。Android (Pixel6a Android14)ではフィードバックが動作しませんでした。
+Windows11とAndroid (Pixel6a Android16)、Ubuntu 24.04で動作確認をしています。

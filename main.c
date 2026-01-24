@@ -99,10 +99,16 @@ volatile uint16_t fifo_count;
 volatile uint32_t fifo_count_avg;
 #endif
 
-__isr bool __time_critical_func(tud_timer_callback)(__unused struct repeating_timer *t) {
+static uint8_t low_priority_irq_num;
+
+__isr bool tud_timer_callback(__unused struct repeating_timer *t) {
+  irq_set_pending(low_priority_irq_num);
+  return true;
+}
+
+__isr static void __time_critical_func(low_priority_worker_irq)(void) {
   tud_task();
   audio_task();
-  return true;
 }
 
 /*------------- MAIN -------------*/
@@ -132,6 +138,9 @@ int main(void) {
   
   struct repeating_timer timer;
   add_repeating_timer_us(-250, tud_timer_callback, NULL, &timer);
+  low_priority_irq_num = (uint8_t) user_irq_claim_unused(true);
+  irq_set_exclusive_handler(low_priority_irq_num, low_priority_worker_irq);
+  irq_set_enabled(low_priority_irq_num, true);
 
   while (1) {
 //     tud_task();// TinyUSB device task

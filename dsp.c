@@ -119,10 +119,8 @@ void __not_in_flash_func(dsp_core1_main)(void){
     int dma_sample[2];
     bool mute = false;
     int buf_length;
-    static int32_t dma_buff[2][I2S_DEQUEUE_LEN * 4 * 8];
+    static int32_t dma_buf_a[2][I2S_DEQUEUE_LEN * 2 * 8], dma_buf_b[2][I2S_DEQUEUE_LEN * 2 * 8];
     uint8_t dma_use = 0;
-    int i2s_dma_chan = i2s_get_dma_ch();
-    I2S_MODE i2s_mode = i2s_get_i2s_mode();
     
     int sample;
     int32_t buf_l[I2S_DEQUEUE_LEN], buf_r[I2S_DEQUEUE_LEN];
@@ -232,15 +230,10 @@ void __not_in_flash_func(dsp_core1_main)(void){
         }
 
         //i2sバッファに格納
-        for (int i = 0, j = 0; i < sample; i++){
-            dma_buff[dma_use][j++] = buff_l[i];
-            dma_buff[dma_use][j++] = buff_r[i];
-        }
-        dma_sample[dma_use] = sample * 2;
+        dma_sample[dma_use] = i2s_format_piodata(buff_l, buff_r, sample, dma_buf_a[dma_use], dma_buf_b[dma_use]);
         // gpio_put(15, 0);
 
-        dma_channel_wait_for_finish_blocking(i2s_dma_chan);
-        dma_channel_transfer_from_buffer_now(i2s_dma_chan, dma_buff[dma_use], dma_sample[dma_use]);
+        i2s_dma_transfer_bloking(dma_buf_a[dma_use], dma_buf_b[dma_use], dma_sample[dma_use]);
         dma_use ^= 1;
     }
 }

@@ -84,7 +84,7 @@ const uint8_t resolutions_per_format[CFG_TUD_AUDIO_FUNC_1_N_FORMATS] = {CFG_TUD_
 uint8_t current_resolution;
 
 // Buffer for speaker data
-//uint16_t i2s_dummy_buffer[CFG_TUD_AUDIO_FUNC_1_EP_OUT_SW_BUF_SZ / 2];
+// uint16_t i2s_dummy_buffer[CFG_TUD_AUDIO_FUNC_1_EP_OUT_SW_BUF_SZ / 2];
 uint8_t spk_buf[CFG_TUD_AUDIO_FUNC_1_EP_OUT_SW_BUF_SZ];
 int spk_data_size;
 
@@ -109,6 +109,9 @@ __isr bool tud_timer_callback(__unused struct repeating_timer *t) {
 __isr static void __time_critical_func(low_priority_worker_irq)(void) {
   tud_task();
   audio_task();
+#if CFG_AUDIO_DEBUG
+  audio_debug_task();
+#endif
 }
 
 /*------------- MAIN -------------*/
@@ -116,14 +119,15 @@ int main(void) {
   i2s_mclk_set_config(pio0, CLOCK_MODE_LOW_JITTER, MODE_I2S);
   board_init();
 
-  //i2s init
+  // i2s初期化
   i2s_mclk_set_pin(18, 20, 22);
   i2s_mclk_init(352800);
+  i2s_volume_change(0, 0);
 
-  //dsp init
+  // dsp初期化
   dsp_init();
 
-  //i2s_mclk_initより後に呼び出す
+  // i2s送信開始
   multicore_launch_core1(dsp_core1_main);
 
   // init device stack on configured roothub port
@@ -135,7 +139,8 @@ int main(void) {
   board_init_after_tusb();
 
   TU_LOG1("Speaker running\r\n");
-  
+
+  // tud_task()とaudio_task()を実行するタイマ
   struct repeating_timer timer;
   add_repeating_timer_us(-250, tud_timer_callback, NULL, &timer);
   low_priority_irq_num = (uint8_t) user_irq_claim_unused(true);
@@ -143,12 +148,6 @@ int main(void) {
   irq_set_enabled(low_priority_irq_num, true);
 
   while (1) {
-//     tud_task();// TinyUSB device task
-//     led_blinking_task();
-// #if CFG_AUDIO_DEBUG
-//     audio_debug_task();
-// #endif
-//     audio_task();
     dsp_core0_task();
   }
 }
@@ -658,28 +657,30 @@ void audio_task(void) {
   static uint32_t start_ms = 0;
 
   if (spk_data_size) {
-    //i2s enqueue
     static int32_t buf_l[I2S_QUEUE_MAX];
     static int32_t buf_r[I2S_QUEUE_MAX];
 
+    // i2sキューに積む
     int rx_length = i2s_unpack_uacdata(spk_buf, spk_data_size, current_resolution, buf_l, buf_r);
     i2s_volume(buf_l, buf_r, rx_length);
     i2s_enqueue(buf_l, buf_r, rx_length);
     spk_data_size = 0;
 
+    // フィードバックは1msに1回
     uint32_t curr_ms = board_millis();
     if (start_ms == curr_ms) return;// not enough time
     start_ms = curr_ms;
 
+    // フィードバック処理
     int length =  i2s_get_queue_length();
     int trget_level = I2S_DEQUEUE_LEN * 5;
-
     uint feedback = (uint32_t)(((uint64_t)current_sample_rate << 16u) / 1000u);
 
-    //フィードバックの最大値,最小値
+    // フィードバックの最大値、最小値
     uint feedback_max = (current_sample_rate / 1000 + 1) << 16;
     uint feedback_min = ((current_sample_rate - 1) / 1000) << 16;
 
+    // フィードバック値計算
     if (trget_level > length){
       feedback = feedback + (uint32_t)((uint64_t)(trget_level - length) * (feedback_max - feedback) / trget_level);
     }
@@ -687,7 +688,7 @@ void audio_task(void) {
       feedback = feedback - (uint32_t)((uint64_t)(length - trget_level) * (feedback - feedback_min) / trget_level);
     }
 
-    //フィードバック値を規定の値に収める
+    // フィードバック値を規定の値に収める
     if (feedback > feedback_max) feedback = feedback_max;
     if (feedback < feedback_min) feedback = feedback_min;
 
@@ -766,17 +767,16 @@ void core1_main(void){
   int dma_sample[2];
   bool mute = false;
   int buf_length;
-  static int32_t dma_buff[2][I2S_DEQUEUE_LEN * 4];
+  static int32_t dma_buf_a[2][I2S_DEQUEUE_LEN * 2], dma_buf_b[2][I2S_DEQUEUE_LEN * 2];
   uint8_t dma_use = 0;
-  int i2s_dma_chan = i2s_get_dma_ch();
   I2S_MODE i2s_mode = i2s_get_i2s_mode();
 
   int sample;
   int32_t buf_l[I2S_DEQUEUE_LEN], buf_r[I2S_DEQUEUE_LEN];
 
   int words_per_frame = 2;
-  if (i2s_mode == MODE_PT8211_DUAL || i2s_mode == MODE_I2S_DUAL) {
-    words_per_frame = 4;
+  if (i2s_mode == MODE_EXDF) {
+    words_per_frame = 1;
   }
 
   gpio_init(PICO_DEFAULT_LED_PIN);
@@ -786,6 +786,7 @@ void core1_main(void){
     buf_length = i2s_get_queue_length();
     // printf("%3d\n", buf_length);
 
+    // i2sキューに規定量が溜まっていたら再生開始
     if (buf_length == 0 && mute == false){
       mute = true;
       gpio_put(PICO_DEFAULT_LED_PIN, 0);
@@ -795,26 +796,33 @@ void core1_main(void){
       gpio_put(PICO_DEFAULT_LED_PIN, 1);
     }
 
+    // i2sキューから取り出し、pioのデータ形式に変換して送信バッファに積む
     if (mute == false){
       sample = i2s_dequeue(buf_l, buf_r, I2S_DEQUEUE_LEN);
-      dma_sample[dma_use] = i2s_format_piodata(buf_l, buf_r, sample, dma_buff[dma_use]);
+      dma_sample[dma_use] = i2s_format_piodata(buf_l, buf_r, sample, dma_buf_a[dma_use], dma_buf_b[dma_use]);
+
+      // キューから取り出したデータ量が要求より少ない場合は、0埋めしてミュート状態へ
       if (sample < I2S_DEQUEUE_LEN){
         for (int i = dma_sample[dma_use]; i < I2S_DEQUEUE_LEN * words_per_frame; i++){
-          dma_buff[dma_use][i] = 0;
+          dma_buf_a[dma_use][i] = 0;
+          dma_buf_b[dma_use][i] = 0;
         }
         mute = true;
         gpio_put(PICO_DEFAULT_LED_PIN, 0);
       }
     }
+
+    // ミュート状態の時は0を送信
     else{
       for (int i = 0; i < I2S_DEQUEUE_LEN * words_per_frame; i++){
-        dma_buff[dma_use][i] = 0;
+        dma_buf_a[dma_use][i] = 0;
+        dma_buf_b[dma_use][i] = 0;
       }
     }
     dma_sample[dma_use] = I2S_DEQUEUE_LEN * words_per_frame;
 
-    dma_channel_wait_for_finish_blocking(i2s_dma_chan);
-    dma_channel_transfer_from_buffer_now(i2s_dma_chan, dma_buff[dma_use], dma_sample[dma_use]);
+    // dmaが終わるまで待機
+    i2s_dma_transfer_bloking(dma_buf_a[dma_use], dma_buf_b[dma_use], dma_sample[dma_use]);
     dma_use ^= 1;
   }
 }

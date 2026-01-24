@@ -768,7 +768,7 @@ void core1_main(void){
     buf_length = i2s_get_queue_length();
     // printf("%3d\n", buf_length);
 
-    // i2sキューに規定量が溜まっていたら再生開始
+    // i2sキューが一定以上溜まったらミュート解除
     if (buf_length == 0 && mute == false){
       mute = true;
       gpio_put(PICO_DEFAULT_LED_PIN, 0);
@@ -778,8 +778,8 @@ void core1_main(void){
       gpio_put(PICO_DEFAULT_LED_PIN, 1);
     }
 
-    // i2sキューから取り出し、pioのデータ形式に変換して送信バッファに積む
     if (mute == false){
+      // i2sキューから取り出す
       sample = i2s_dequeue(buf_l, buf_r, I2S_DEQUEUE_LEN);
 
       // キューから取り出したデータ量が要求より少ない場合は、0埋めしてミュート状態へ
@@ -802,6 +802,7 @@ void core1_main(void){
       sample = I2S_DEQUEUE_LEN;
     }
 
+    // pio送信形式に変換
     dma_sample[dma_use] = i2s_format_piodata(buf_l, buf_r, sample, dma_buf_a[dma_use], dma_buf_b[dma_use]);
 
     // dmaが終わるまで待機

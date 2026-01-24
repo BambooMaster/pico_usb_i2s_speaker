@@ -118,6 +118,7 @@ int main(void) {
   //i2s init
   i2s_mclk_set_pin(18, 20, 22);
   i2s_mclk_init(current_sample_rate);
+  i2s_volume_change(0, 0);
 
   //i2s_mclk_initより後に呼び出す
   multicore_launch_core1(core1_main);

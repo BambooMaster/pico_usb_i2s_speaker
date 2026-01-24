@@ -757,15 +757,9 @@ void core1_main(void){
   int buf_length;
   static int32_t dma_buf_a[2][I2S_DEQUEUE_LEN * 2], dma_buf_b[2][I2S_DEQUEUE_LEN * 2];
   uint8_t dma_use = 0;
-  I2S_MODE i2s_mode = i2s_get_i2s_mode();
 
   int sample;
   int32_t buf_l[I2S_DEQUEUE_LEN], buf_r[I2S_DEQUEUE_LEN];
-
-  int words_per_frame = 2;
-  if (i2s_mode == MODE_EXDF) {
-    words_per_frame = 1;
-  }
 
   gpio_init(PICO_DEFAULT_LED_PIN);
   gpio_set_dir(PICO_DEFAULT_LED_PIN, GPIO_OUT);
@@ -787,27 +781,28 @@ void core1_main(void){
     // i2sキューから取り出し、pioのデータ形式に変換して送信バッファに積む
     if (mute == false){
       sample = i2s_dequeue(buf_l, buf_r, I2S_DEQUEUE_LEN);
-      dma_sample[dma_use] = i2s_format_piodata(buf_l, buf_r, sample, dma_buf_a[dma_use], dma_buf_b[dma_use]);
 
       // キューから取り出したデータ量が要求より少ない場合は、0埋めしてミュート状態へ
       if (sample < I2S_DEQUEUE_LEN){
-        for (int i = dma_sample[dma_use]; i < I2S_DEQUEUE_LEN * words_per_frame; i++){
-          dma_buf_a[dma_use][i] = 0;
-          dma_buf_b[dma_use][i] = 0;
+        for (int i = sample; i < I2S_DEQUEUE_LEN; i++){
+          buf_l[i] = 0;
+          buf_r[i] = 0;
         }
+        sample = I2S_DEQUEUE_LEN;
         mute = true;
         gpio_put(PICO_DEFAULT_LED_PIN, 0);
       }
     }
-
-    // ミュート状態の時は0を送信
     else{
-      for (int i = 0; i < I2S_DEQUEUE_LEN * words_per_frame; i++){
-        dma_buf_a[dma_use][i] = 0;
-        dma_buf_b[dma_use][i] = 0;
+      // ミュート状態の時は0を送信
+      for (int i = 0; i < I2S_DEQUEUE_LEN; i++){
+        buf_l[i] = 0;
+        buf_r[i] = 0;
       }
+      sample = I2S_DEQUEUE_LEN;
     }
-    dma_sample[dma_use] = I2S_DEQUEUE_LEN * words_per_frame;
+
+    dma_sample[dma_use] = i2s_format_piodata(buf_l, buf_r, sample, dma_buf_a[dma_use], dma_buf_b[dma_use]);
 
     // dmaが終わるまで待機
     i2s_dma_transfer_bloking(dma_buf_a[dma_use], dma_buf_b[dma_use], dma_sample[dma_use]);

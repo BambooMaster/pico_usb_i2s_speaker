@@ -139,12 +139,12 @@ int main(void) {
   TU_LOG1("Speaker running\r\n");
 
   // tud_task()とaudio_task()を実行するタイマ
-  struct repeating_timer timer;
-  add_repeating_timer_us(-TUD_TASK_INTERVAL_US, tud_timer_callback, NULL, &timer);
+  struct repeating_timer tud_timer;
   low_priority_irq_num = (uint8_t)user_irq_claim_unused(true);
   irq_set_exclusive_handler(low_priority_irq_num, low_priority_worker_irq);
   irq_set_priority(low_priority_irq_num, PICO_LOWEST_IRQ_PRIORITY);
   irq_set_enabled(low_priority_irq_num, true);
+  add_repeating_timer_us(-TUD_TASK_INTERVAL_US, tud_timer_callback, NULL, &tud_timer);
 
   while (1) __wfi;
 }

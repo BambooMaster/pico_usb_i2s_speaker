@@ -98,6 +98,8 @@ volatile uint16_t fifo_count;
 volatile uint32_t fifo_count_avg;
 #endif
 
+#define TUD_TASK_INTERVAL_US    250
+
 static uint8_t low_priority_irq_num;
 
 __isr bool tud_timer_callback(__unused struct repeating_timer *t) {
@@ -138,9 +140,10 @@ int main(void) {
 
   // tud_task()とaudio_task()を実行するタイマ
   struct repeating_timer timer;
-  add_repeating_timer_us(-250, tud_timer_callback, NULL, &timer);
-  low_priority_irq_num = (uint8_t) user_irq_claim_unused(true);
+  add_repeating_timer_us(-TUD_TASK_INTERVAL_US, tud_timer_callback, NULL, &timer);
+  low_priority_irq_num = (uint8_t)user_irq_claim_unused(true);
   irq_set_exclusive_handler(low_priority_irq_num, low_priority_worker_irq);
+  irq_set_priority(low_priority_irq_num, PICO_LOWEST_IRQ_PRIORITY);
   irq_set_enabled(low_priority_irq_num, true);
 
   while (1) __wfi;

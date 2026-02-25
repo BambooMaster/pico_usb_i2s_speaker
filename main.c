@@ -102,17 +102,13 @@ volatile uint32_t fifo_count_avg;
 
 static uint8_t low_priority_irq_num;
 
-__isr bool tud_timer_callback(__unused struct repeating_timer *t) {
-  irq_set_pending(low_priority_irq_num);
-  return true;
-}
-
-__isr static void __time_critical_func(low_priority_worker_irq)(void) {
+__isr bool __time_critical_func(tud_timer_callback)(__unused struct repeating_timer *t) {
   tud_task();
   audio_task();
 #if CFG_AUDIO_DEBUG
   audio_debug_task();
 #endif
+  return true;
 }
 
 /*------------- MAIN -------------*/
@@ -139,12 +135,11 @@ int main(void) {
   TU_LOG1("Speaker running\r\n");
 
   // tud_task()とaudio_task()を実行するタイマ
-  struct repeating_timer tud_timer;
-  low_priority_irq_num = (uint8_t)user_irq_claim_unused(true);
-  irq_set_exclusive_handler(low_priority_irq_num, low_priority_worker_irq);
-  irq_set_priority(low_priority_irq_num, PICO_LOWEST_IRQ_PRIORITY);
-  irq_set_enabled(low_priority_irq_num, true);
-  add_repeating_timer_us(-TUD_TASK_INTERVAL_US, tud_timer_callback, NULL, &tud_timer);
+  static struct repeating_timer tud_timer;
+  alarm_pool_t* low_prio_pool = alarm_pool_create_with_unused_hardware_alarm(1);
+  uint irq_num = hardware_alarm_get_irq_num(alarm_pool_hardware_alarm_num(low_prio_pool));
+  irq_set_priority(irq_num, PICO_LOWEST_IRQ_PRIORITY);
+  alarm_pool_add_repeating_timer_us(low_prio_pool, -TUD_TASK_INTERVAL_US, tud_timer_callback, NULL, &tud_timer);
 
   while (1) __wfi;
 }

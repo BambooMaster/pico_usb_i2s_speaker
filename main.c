@@ -659,7 +659,7 @@ void audio_task(void) {
 
     // フィードバック処理
     int length =  i2s_get_queue_length();
-    int trget_level = I2S_DEQUEUE_LEN * 5;
+    int trget_level = i2s_get_freq() * 5 / 2000;
     uint feedback = (uint32_t)(((uint64_t)current_sample_rate << 16u) / 1000u);
 
     // フィードバックの最大値、最小値
@@ -753,17 +753,20 @@ void core1_main(void){
   int dma_sample[2];
   bool mute = false;
   int buf_length;
-  static int32_t dma_buf_a[2][I2S_DEQUEUE_LEN * 2], dma_buf_b[2][I2S_DEQUEUE_LEN * 2];
+  static int32_t dma_buf_a[2][I2S_MAX_FREQ_KHZ * 2], dma_buf_b[2][I2S_MAX_FREQ_KHZ * 2];
   uint8_t dma_use = 0;
+  int dequeue_len;
 
   int sample;
-  int32_t buf_l[I2S_DEQUEUE_LEN], buf_r[I2S_DEQUEUE_LEN];
+  int32_t buf_l[I2S_MAX_FREQ_KHZ], buf_r[I2S_MAX_FREQ_KHZ];
 
   gpio_init(PICO_DEFAULT_LED_PIN);
   gpio_set_dir(PICO_DEFAULT_LED_PIN, GPIO_OUT);
 
   while (1){
     buf_length = i2s_get_queue_length();
+    // 0.5ms分ずつi2sに送る
+    int dequeue_len = i2s_get_freq() / 2000;
     // printf("%3d\n", buf_length);
 
     // i2sキューが一定以上溜まったらミュート解除
@@ -771,33 +774,33 @@ void core1_main(void){
       mute = true;
       gpio_put(PICO_DEFAULT_LED_PIN, 0);
     }
-    else if (buf_length >= (I2S_DEQUEUE_LEN * 2) && mute == true){
+    else if (buf_length >= (dequeue_len * 2) && mute == true){
       mute = false;
       gpio_put(PICO_DEFAULT_LED_PIN, 1);
     }
 
     if (mute == false){
       // i2sキューから取り出す
-      sample = i2s_dequeue(buf_l, buf_r, I2S_DEQUEUE_LEN);
+      sample = i2s_dequeue(buf_l, buf_r, dequeue_len);
 
       // キューから取り出したデータ量が要求より少ない場合は、0埋めしてミュート状態へ
-      if (sample < I2S_DEQUEUE_LEN){
-        for (int i = sample; i < I2S_DEQUEUE_LEN; i++){
+      if (sample < dequeue_len){
+        for (int i = sample; i < dequeue_len; i++){
           buf_l[i] = 0;
           buf_r[i] = 0;
         }
-        sample = I2S_DEQUEUE_LEN;
+        sample = dequeue_len;
         mute = true;
         gpio_put(PICO_DEFAULT_LED_PIN, 0);
       }
     }
     else{
       // ミュート状態の時は0を送信
-      for (int i = 0; i < I2S_DEQUEUE_LEN; i++){
+      for (int i = 0; i < dequeue_len; i++){
         buf_l[i] = 0;
         buf_r[i] = 0;
       }
-      sample = I2S_DEQUEUE_LEN;
+      sample = dequeue_len;
     }
 
     // pio送信形式に変換

@@ -767,6 +767,10 @@ void core1_main(void){
     buf_length = i2s_get_queue_length();
     // 0.5ms分ずつi2sに送る
     int dequeue_len = i2s_get_freq() / 2000;
+    if (dequeue_len > I2S_MAX_FREQ_KHZ) {
+      dequeue_len = I2S_MAX_FREQ_KHZ;
+    }
+    
     // printf("%3d\n", buf_length);
 
     // i2sキューが一定以上溜まったらミュート解除

@@ -60,6 +60,8 @@ target_include_directories(pico_usb_i2s_speaker PRIVATE
   ${CMAKE_CURRENT_LIST_DIR}/.. # for our common lwipopts or any other standard includes, if required
 )
 
+set(I2S_MAX_FREQ_KHZ 96)
+set(I2S_QUEUE_LEN 10)
 add_subdirectory(${CMAKE_SOURCE_DIR}/lib/pico-i2s-pio)
 
 # Add any user requested libraries

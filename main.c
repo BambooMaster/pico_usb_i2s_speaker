@@ -749,16 +749,18 @@ void tud_hid_set_report_cb(uint8_t itf, uint8_t report_id, hid_report_type_t rep
 
 #endif
 
+#define DEQUEUE_MAX_LEN   (CFG_TUD_AUDIO_FUNC_1_MAX_SAMPLE_RATE_FS / 2000 + 1)
+
 void core1_main(void){
   int dma_sample[2];
   bool mute = false;
   int buf_length;
-  static int32_t dma_buf_a[2][I2S_MAX_FREQ_KHZ * 2], dma_buf_b[2][I2S_MAX_FREQ_KHZ * 2];
+  static int32_t dma_buf_a[2][DEQUEUE_MAX_LEN * 2], dma_buf_b[2][DEQUEUE_MAX_LEN * 2];
   uint8_t dma_use = 0;
   int dequeue_len;
 
   int sample;
-  int32_t buf_l[I2S_MAX_FREQ_KHZ], buf_r[I2S_MAX_FREQ_KHZ];
+  int32_t buf_l[DEQUEUE_MAX_LEN], buf_r[DEQUEUE_MAX_LEN];
 
   gpio_init(PICO_DEFAULT_LED_PIN);
   gpio_set_dir(PICO_DEFAULT_LED_PIN, GPIO_OUT);
@@ -767,10 +769,10 @@ void core1_main(void){
     buf_length = i2s_get_queue_length();
     // 0.5ms分ずつi2sに送る
     int dequeue_len = i2s_get_freq() / 2000;
-    if (dequeue_len > I2S_MAX_FREQ_KHZ) {
-      dequeue_len = I2S_MAX_FREQ_KHZ;
+    if (dequeue_len > DEQUEUE_MAX_LEN) {
+      dequeue_len = DEQUEUE_MAX_LEN;
     }
-    
+
     // printf("%3d\n", buf_length);
 
     // i2sキューが一定以上溜まったらミュート解除

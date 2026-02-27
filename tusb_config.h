@@ -91,26 +91,13 @@ extern "C" {
 // DEVICE CONFIGURATION
 //--------------------------------------------------------------------
 
-// Expose audio class debug information via HID interface
-#ifndef CFG_AUDIO_DEBUG
-#define CFG_AUDIO_DEBUG           0
-#endif
-
 #ifndef CFG_TUD_ENDPOINT0_SIZE
 #define CFG_TUD_ENDPOINT0_SIZE    64
 #endif
 
-#define CFG_TUD_HID_EP_BUFSIZE    64
-
 //------------- CLASS -------------//
 #define CFG_TUD_AUDIO             1
-
-#if CFG_AUDIO_DEBUG
-#define CFG_TUD_HID               1
-#else
 #define CFG_TUD_HID               0
-#endif
-
 #define CFG_TUD_CDC               0
 #define CFG_TUD_MSC               0
 #define CFG_TUD_MIDI              0

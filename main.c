@@ -28,7 +28,6 @@
 #include <string.h>
 
 #include "bsp/board_api.h"
-#include "common_types.h"
 #include "tusb.h"
 #include "usb_descriptors.h"
 
@@ -91,13 +90,6 @@ void led_blinking_task(void);
 void audio_task(void);
 void core1_main(void);
 
-#if CFG_AUDIO_DEBUG
-void audio_debug_task(void);
-uint8_t current_alt_settings;
-volatile uint16_t fifo_count;
-volatile uint32_t fifo_count_avg;
-#endif
-
 #define TUD_TASK_INTERVAL_US    250
 
 static uint8_t low_priority_irq_num;
@@ -105,9 +97,6 @@ static uint8_t low_priority_irq_num;
 __isr bool __time_critical_func(tud_timer_callback)(__unused struct repeating_timer *t) {
   tud_task();
   audio_task();
-#if CFG_AUDIO_DEBUG
-  audio_debug_task();
-#endif
   return true;
 }
 
@@ -502,10 +491,6 @@ bool tud_audio_set_itf_cb(uint8_t rhport, tusb_control_request_t const *p_reques
   if (ITF_NUM_AUDIO_STREAMING == itf && alt != 0)
     blink_interval_ms = BLINK_STREAMING;
 
-#if CFG_AUDIO_DEBUG
-  current_alt_settings = alt;
-#endif
-
   if (alt != 0) {
     current_resolution = resolutions_per_format[alt - 1];
   }
@@ -582,44 +567,6 @@ bool tud_audio_set_itf_close_ep_cb(uint8_t rhport, tusb_control_request_t const 
   return true;
 }
 
-#if 0
-void tud_audio_feedback_params_cb(uint8_t func_id, uint8_t alt_itf, audio_feedback_params_t *feedback_param) {
-  (void) func_id;
-  (void) alt_itf;
-  // Set feedback method to fifo counting
-  feedback_param->method = AUDIO_FEEDBACK_METHOD_FIFO_COUNT;
-  feedback_param->sample_freq = current_sample_rate;
-
-  // About FIFO threshold:
-  //
-  // By default the threshold is set to half FIFO size, which works well in most cases,
-  // you can reduce the threshold to have less latency.
-  //
-  // For example, here we could set the threshold to 2 ms of audio data, as audio_task() read audio data every 1 ms,
-  // having 2 ms threshold allows some margin and a quick response:
-  //
-  // feedback_param->fifo_count.fifo_threshold =
-  //    current_sample_rate * CFG_TUD_AUDIO_FUNC_1_N_CHANNELS_RX * CFG_TUD_AUDIO_FUNC_1_N_BYTES_PER_SAMPLE_RX / 1000 * 2;
-}
-#endif
-
-#if CFG_AUDIO_DEBUG
-bool tud_audio_rx_done_isr(uint8_t rhport, uint16_t n_bytes_received, uint8_t func_id, uint8_t ep_out, uint8_t cur_alt_setting) {
-  (void) rhport;
-  (void) n_bytes_received;
-  (void) func_id;
-  (void) ep_out;
-  (void) cur_alt_setting;
-
-  spk_data_size = tud_audio_read(spk_buf, n_bytes_received);
-
-  fifo_count = tud_audio_available();
-  // Same averaging method used in UAC2 class
-  fifo_count_avg = (uint32_t) (((uint64_t) fifo_count_avg * 63 + ((uint32_t) fifo_count << 16)) >> 6);
-
-  return true;
-}
-#else
 bool tud_audio_rx_done_isr(uint8_t rhport, uint16_t n_bytes_received, uint8_t func_id, uint8_t ep_out, uint8_t cur_alt_setting) {
   (void) rhport;
   (void) n_bytes_received;
@@ -631,7 +578,6 @@ bool tud_audio_rx_done_isr(uint8_t rhport, uint16_t n_bytes_received, uint8_t fu
 
   return true;
 }
-#endif
 
 //--------------------------------------------------------------------+
 // AUDIO Task
@@ -685,6 +631,7 @@ void audio_task(void) {
 //--------------------------------------------------------------------+
 // BLINKING TASK
 //--------------------------------------------------------------------+
+#if 0
 void led_blinking_task(void) {
   static uint32_t start_ms = 0;
   static bool led_state = false;
@@ -696,57 +643,6 @@ void led_blinking_task(void) {
   board_led_write(led_state);
   led_state = 1 - led_state;
 }
-
-#if CFG_AUDIO_DEBUG
-//--------------------------------------------------------------------+
-// HID interface for audio debug
-//--------------------------------------------------------------------+
-// Every 1ms, we will sent 1 debug information report
-void audio_debug_task(void) {
-  static uint32_t start_ms = 0;
-  uint32_t curr_ms = board_millis();
-  if (start_ms == curr_ms) return;// not enough time
-  start_ms = curr_ms;
-
-  audio_debug_info_t debug_info;
-  debug_info.sample_rate = current_sample_rate;
-  debug_info.alt_settings = current_alt_settings;
-  debug_info.fifo_size = CFG_TUD_AUDIO_FUNC_1_EP_OUT_SW_BUF_SZ;
-  debug_info.fifo_count = fifo_count;
-  debug_info.fifo_count_avg = (uint16_t) (fifo_count_avg >> 16);
-  for (int i = 0; i < CFG_TUD_AUDIO_FUNC_1_N_CHANNELS_RX + 1; i++) {
-    debug_info.mute[i] = mute[i];
-    debug_info.volume[i] = volume[i];
-  }
-
-  if (tud_hid_ready())
-    tud_hid_report(0, &debug_info, sizeof(debug_info));
-}
-
-// Invoked when received GET_REPORT control request
-// Unused here
-uint16_t tud_hid_get_report_cb(uint8_t itf, uint8_t report_id, hid_report_type_t report_type, uint8_t *buffer, uint16_t reqlen) {
-  // TODO not Implemented
-  (void) itf;
-  (void) report_id;
-  (void) report_type;
-  (void) buffer;
-  (void) reqlen;
-
-  return 0;
-}
-
-// Invoked when received SET_REPORT control request or
-// Unused here
-void tud_hid_set_report_cb(uint8_t itf, uint8_t report_id, hid_report_type_t report_type, uint8_t const *buffer, uint16_t bufsize) {
-  // This example doesn't use multiple report and report ID
-  (void) itf;
-  (void) report_id;
-  (void) report_type;
-  (void) buffer;
-  (void) bufsize;
-}
-
 #endif
 
 #define DEQUEUE_MAX_LEN   (CFG_TUD_AUDIO_FUNC_1_MAX_SAMPLE_RATE_FS / 2000 + 1)

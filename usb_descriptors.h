@@ -27,6 +27,13 @@
 #ifndef USB_DESCRIPTORS_H_
 #define USB_DESCRIPTORS_H_
 
+enum
+{
+  ITF_NUM_AUDIO_CONTROL = 0,
+  ITF_NUM_AUDIO_STREAMING,
+  ITF_NUM_TOTAL
+};
+
 //--------------------------------------------------------------------+
 // UAC2 DESCRIPTOR TEMPLATES
 //--------------------------------------------------------------------+

@@ -26,7 +26,6 @@
 #include "bsp/board_api.h"
 #include "tusb.h"
 #include "usb_descriptors.h"
-#include "common_types.h"
 
 /* A combination of interfaces must have a unique product id, since PC will save device driver after the first plug.
  * Same VID/PID with different interface e.g MSC (first), then CDC (later) will possibly cause system error on PC.
@@ -71,33 +70,6 @@ uint8_t const * tud_descriptor_device_cb(void) {
   return (uint8_t const *) &desc_device;
 }
 
-#if CFG_AUDIO_DEBUG
-//--------------------------------------------------------------------+
-// HID Report Descriptor
-//--------------------------------------------------------------------+
-
-uint8_t const desc_hid_report[] = {
-  HID_USAGE_PAGE_N ( HID_USAGE_PAGE_VENDOR, 2   ),\
-  HID_USAGE        ( 0x01                       ),\
-  HID_COLLECTION   ( HID_COLLECTION_APPLICATION ),\
-  HID_USAGE       ( 0x02                                   ),\
-  HID_LOGICAL_MIN ( 0x00                                   ),\
-  HID_LOGICAL_MAX_N ( 0xff, 2                              ),\
-  HID_REPORT_SIZE ( 8                                      ),\
-  HID_REPORT_COUNT( sizeof(audio_debug_info_t)             ),\
-  HID_INPUT       ( HID_DATA | HID_VARIABLE | HID_ABSOLUTE ),\
-  HID_COLLECTION_END
-};
-
-// Invoked when received GET HID REPORT DESCRIPTOR
-// Application return pointer to descriptor
-// Descriptor contents must exist long enough for transfer to complete
-uint8_t const * tud_hid_descriptor_report_cb(uint8_t itf) {
-  (void) itf;
-  return desc_hid_report;
-}
-#endif
-
 //--------------------------------------------------------------------+
 // Configuration Descriptor
 //--------------------------------------------------------------------+
@@ -107,32 +79,25 @@ uint8_t const * tud_hid_descriptor_report_cb(uint8_t itf) {
   // 0 control, 1 In, 2 Bulk, 3 Iso, 4 In etc ...
   #define EPNUM_AUDIO       0x03
   #define EPNUM_AUDIO_FB    0x03
-  #define EPNUM_DEBUG       0x04
 
 #elif TU_CHECK_MCU(OPT_MCU_NRF5X)
   // nRF5x ISO can only be endpoint 8
   #define EPNUM_AUDIO       0x08
   #define EPNUM_AUDIO_FB    0x08
-  #define EPNUM_DEBUG       0x01
 
 #elif defined(TUD_ENDPOINT_ONE_DIRECTION_ONLY)
   // MCUs that don't support a same endpoint number with different direction IN and OUT defined in tusb_mcu.h
   //    e.g EP1 OUT & EP1 IN cannot exist together
   #define EPNUM_AUDIO       0x02
   #define EPNUM_AUDIO_FB    0x01
-  #define EPNUM_DEBUG       0x03
 
 #else
   #define EPNUM_AUDIO       0x01
   #define EPNUM_AUDIO_FB    0x01
-  #define EPNUM_DEBUG       0x02
 #endif
 
-#if CFG_AUDIO_DEBUG
-  #define CONFIG_UAC1_TOTAL_LEN    	(TUD_CONFIG_DESC_LEN + TUD_AUDIO10_SPEAKER_STEREO_FB_DESC_LEN(4) + TUD_HID_DESC_LEN)
-#else
-  #define CONFIG_UAC1_TOTAL_LEN    	(TUD_CONFIG_DESC_LEN + TUD_AUDIO10_SPEAKER_STEREO_FB_DESC_LEN(4))
-#endif
+#define CONFIG_UAC1_TOTAL_LEN    	(TUD_CONFIG_DESC_LEN + TUD_AUDIO10_SPEAKER_STEREO_FB_DESC_LEN(4))
+
 
 uint8_t const desc_uac1_configuration[] = {
   // Config number, interface count, string index, total length, attribute, power in mA
@@ -141,21 +106,13 @@ uint8_t const desc_uac1_configuration[] = {
   // Interface number, string index, byte per sample, bit per sample, EP Out, EP size, EP feedback, sample rates (44.1kHz, 48kHz)
   TUD_AUDIO10_SPEAKER_STEREO_FB_DESCRIPTOR(ITF_NUM_AUDIO_CONTROL, 5, CFG_TUD_AUDIO_FUNC_1_FORMAT_1_N_BYTES_PER_SAMPLE_RX, CFG_TUD_AUDIO_FUNC_1_FORMAT_1_RESOLUTION_RX, EPNUM_AUDIO, CFG_TUD_AUDIO_FUNC_1_FORMAT_1_EP_OUT_SZ_FS, EPNUM_AUDIO_FB | 0x80, 44100, 48000, 88200, 96000),
 
-#if CFG_AUDIO_DEBUG
-  // Interface number, string index, protocol, report descriptor len, EP In address, size & polling interval
-  TUD_HID_DESCRIPTOR(ITF_NUM_DEBUG, 0, HID_ITF_PROTOCOL_NONE, sizeof(desc_hid_report), EPNUM_DEBUG | 0x80, CFG_TUD_HID_EP_BUFSIZE, 7)
-#endif
 };
 
 TU_VERIFY_STATIC(sizeof(desc_uac1_configuration) == CONFIG_UAC1_TOTAL_LEN, "Incorrect size");
 
 #if TUD_OPT_HIGH_SPEED
 
-#if CFG_AUDIO_DEBUG
-  #define CONFIG_UAC2_TOTAL_LEN    	(TUD_CONFIG_DESC_LEN + TUD_AUDIO20_SPEAKER_STEREO_FB_DESC_LEN + TUD_HID_DESC_LEN)
-#else
-  #define CONFIG_UAC2_TOTAL_LEN    	(TUD_CONFIG_DESC_LEN + TUD_AUDIO20_SPEAKER_STEREO_FB_DESC_LEN)
-#endif
+#define CONFIG_UAC2_TOTAL_LEN    	(TUD_CONFIG_DESC_LEN + TUD_AUDIO20_SPEAKER_STEREO_FB_DESC_LEN)
 
 uint8_t const desc_uac2_configuration[] = {
   // Config number, interface count, string index, total length, attribute, power in mA
@@ -164,10 +121,6 @@ uint8_t const desc_uac2_configuration[] = {
   // Interface number, string index, byte per sample, bit per sample, EP Out, EP size, EP feedback, feedback EP size,
   TUD_AUDIO20_SPEAKER_STEREO_FB_DESCRIPTOR(ITF_NUM_AUDIO_CONTROL, 4, CFG_TUD_AUDIO_FUNC_1_N_BYTES_PER_SAMPLE_RX, CFG_TUD_AUDIO_FUNC_1_RESOLUTION_RX, EPNUM_AUDIO, CFG_TUD_AUDIO_FUNC_1_EP_OUT_SZ_HS, EPNUM_AUDIO_FB | 0x80, 4),
 
-#if CFG_AUDIO_DEBUG
-  // Interface number, string index, protocol, report descriptor len, EP In address, size & polling interval
-  TUD_HID_DESCRIPTOR(ITF_NUM_DEBUG, 0, HID_ITF_PROTOCOL_NONE, sizeof(desc_hid_report), EPNUM_DEBUG | 0x80, CFG_TUD_HID_EP_BUFSIZE, 7)
-#endif
 };
 
 TU_VERIFY_STATIC(sizeof(desc_uac2_configuration) == CONFIG_UAC2_TOTAL_LEN, "Incorrect size");

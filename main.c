@@ -605,7 +605,7 @@ void audio_task(void) {
 
     // フィードバック処理
     int length =  i2s_get_queue_length();
-    int trget_level = i2s_get_freq() * 5 / 2000;
+    int trget_level = i2s_get_freq() * 3 / 2000;
     uint feedback = (uint32_t)(((uint64_t)current_sample_rate << 16u) / 1000u);
 
     // フィードバックの最大値、最小値
@@ -676,7 +676,7 @@ void core1_main(void){
       mute = true;
       gpio_put(PICO_DEFAULT_LED_PIN, 0);
     }
-    else if (buf_length >= (dequeue_len * 2) && mute == true){
+    else if (buf_length >= (dequeue_len * 3) && mute == true){
       mute = false;
       gpio_put(PICO_DEFAULT_LED_PIN, 1);
     }

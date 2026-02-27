@@ -91,8 +91,7 @@ void audio_task(void);
 void core1_main(void);
 
 #define TUD_TASK_INTERVAL_US    250
-
-static uint8_t low_priority_irq_num;
+#define DEQUEUE_MAX_LEN   (CFG_TUD_AUDIO_FUNC_1_MAX_SAMPLE_RATE_FS / 2000 + 1)
 
 __isr bool __time_critical_func(tud_timer_callback)(__unused struct repeating_timer *t) {
   tud_task();
@@ -644,8 +643,6 @@ void led_blinking_task(void) {
   led_state = 1 - led_state;
 }
 #endif
-
-#define DEQUEUE_MAX_LEN   (CFG_TUD_AUDIO_FUNC_1_MAX_SAMPLE_RATE_FS / 2000 + 1)
 
 void core1_main(void){
   int dma_sample[2];

@@ -645,7 +645,7 @@ void led_blinking_task(void) {
 #endif
 
 void core1_main(void){
-  int dma_sample[2];
+  int dma_sample;
   bool mute = false;
   int buf_length;
   static int32_t dma_buf_a[2][DEQUEUE_MAX_LEN * 2], dma_buf_b[2][DEQUEUE_MAX_LEN * 2];
@@ -703,10 +703,10 @@ void core1_main(void){
     }
 
     // pio送信形式に変換
-    dma_sample[dma_use] = i2s_format_piodata(buf_l, buf_r, sample, dma_buf_a[dma_use], dma_buf_b[dma_use]);
+    dma_sample = i2s_format_piodata(buf_l, buf_r, sample, dma_buf_a[dma_use], dma_buf_b[dma_use]);
 
     // dmaが終わるまで待機
-    i2s_dma_transfer_bloking(dma_buf_a[dma_use], dma_buf_b[dma_use], dma_sample[dma_use]);
+    i2s_dma_transfer_bloking(dma_buf_a[dma_use], dma_buf_b[dma_use], dma_sample);
     dma_use ^= 1;
   }
 }

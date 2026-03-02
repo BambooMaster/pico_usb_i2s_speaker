@@ -661,7 +661,7 @@ void core1_main(void){
   while (1){
     buf_length = i2s_get_queue_length();
     // 0.5ms分ずつi2sに送る
-    int dequeue_len = i2s_get_freq() / 2000;
+    dequeue_len = i2s_get_freq() / 2000;
     if (dequeue_len > DEQUEUE_MAX_LEN) {
       dequeue_len = DEQUEUE_MAX_LEN;
     }

@@ -706,7 +706,7 @@ void core1_main(void){
     dma_sample = i2s_format_piodata(buf_l, buf_r, sample, dma_buf_a[dma_use], dma_buf_b[dma_use]);
 
     // dmaが終わるまで待機
-    i2s_dma_transfer_bloking(dma_buf_a[dma_use], dma_buf_b[dma_use], dma_sample);
+    i2s_dma_transfer_blocking(dma_buf_a[dma_use], dma_buf_b[dma_use], dma_sample);
     dma_use ^= 1;
   }
 }

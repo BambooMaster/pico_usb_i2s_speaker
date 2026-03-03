@@ -26,6 +26,8 @@
 #ifndef FIR_H
 #define FIR_H
 
+#define FIR_DEQUEUE_MAX_LEN   (96 / 2 + 1)
+
 #define FIR_1ST_140DB_TAPS 402
 #define FIR_2ND_140DB_TAPS 56
 #define FIR_1ST_BLOCK_SIZE I2S_DEQUEUE_LEN

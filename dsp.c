@@ -60,8 +60,8 @@ static float32_t fir_state_r_stage1_96k[(FIR_1ST_140DB_96_TAPS / 2) + FIR_1ST_96
 static float32_t fir_state_r_stage2_96k[(FIR_2ND_140DB_96_TAPS / 2) + FIR_2ND_96_BLOCK_SIZE - 1] = {0.0f};
 
 // core間通信用変数
-static q31_t fir_out_buf_q31_r[I2S_DEQUEUE_LEN * 8];
-static float32_t fir_buf_float_r_process[I2S_DEQUEUE_LEN * 8];
+static q31_t fir_out_buf_q31_r[FIR_DEQUEUE_MAX_LEN * 8];
+static float32_t fir_buf_float_r_process[FIR_DEQUEUE_MAX_LEN * 8];
 
 void dsp_init(void){
     // デバッグLED init
@@ -96,8 +96,8 @@ void __not_in_flash_func(dsp_core0_task)(void){
         // gpio_put(14, 1);
 
         uint32_t freq = dsp_get_freq();
-        int sample = I2S_DEQUEUE_LEN;
-        static float32_t fir_buf_float_r_temp[I2S_DEQUEUE_LEN * 8];
+        int sample = freq / 2000;
+        static float32_t fir_buf_float_r_temp[FIR_DEQUEUE_MAX_LEN * 8];
 
         if (freq <= 48000){
             // 補完処理のゲイン補正
@@ -125,42 +125,48 @@ void __not_in_flash_func(dsp_core0_task)(void){
 }
 
 void __not_in_flash_func(dsp_core1_main)(void){
-    int dma_sample[2];
+    int dma_sample;
     bool mute = false;
     int buf_length;
-    static int32_t dma_buf_a[2][I2S_DEQUEUE_LEN * 2 * 8], dma_buf_b[2][I2S_DEQUEUE_LEN * 2 * 8];
+    static int32_t dma_buf_a[2][FIR_DEQUEUE_MAX_LEN * 2 * 8], dma_buf_b[2][FIR_DEQUEUE_MAX_LEN * 2 * 8];
     uint8_t dma_use = 0;
+    int dequeue_len;
     uint32_t freq;
 
     int sample;
-    static int32_t i2s_rx_buf_l[I2S_DEQUEUE_LEN], i2s_rx_buf_r[I2S_DEQUEUE_LEN];
+    static int32_t i2s_rx_buf_l[FIR_DEQUEUE_MAX_LEN], i2s_rx_buf_r[FIR_DEQUEUE_MAX_LEN];
 
     gpio_init(PICO_DEFAULT_LED_PIN);
     gpio_set_dir(PICO_DEFAULT_LED_PIN, GPIO_OUT);
 
     while (1){
-        static float32_t fir_buf_float_l_process[I2S_DEQUEUE_LEN * 8];
-        static float32_t fir_buf_float_l_temp[I2S_DEQUEUE_LEN * 8];
-        static q31_t fir_out_buf_q31_l[I2S_DEQUEUE_LEN * 8];
+        static float32_t fir_buf_float_l_process[FIR_DEQUEUE_MAX_LEN * 8];
+        static float32_t fir_buf_float_l_temp[FIR_DEQUEUE_MAX_LEN * 8];
+        static q31_t fir_out_buf_q31_l[FIR_DEQUEUE_MAX_LEN * 8];
 
         // gpio_put(15, 1);
 
         buf_length = i2s_get_queue_length();
+        freq = dsp_get_freq();
+        dequeue_len = freq / 2000;
+        if (dequeue_len > FIR_DEQUEUE_MAX_LEN) {
+            dequeue_len = FIR_DEQUEUE_MAX_LEN;
+        }
         // printf("%3d\n", buf_length);
 
         if (buf_length == 0 && mute == false){
             mute = true;
             gpio_put(PICO_DEFAULT_LED_PIN, 0);
         }
-        else if (buf_length >= (I2S_DEQUEUE_LEN * 2) && mute == true){
+        else if (buf_length >= (dequeue_len * 3) && mute == true){
             mute = false;
             gpio_put(PICO_DEFAULT_LED_PIN, 1);
         }
 
         if (mute == false){
-            sample = i2s_dequeue(i2s_rx_buf_l, i2s_rx_buf_r, I2S_DEQUEUE_LEN);
-            if (sample < I2S_DEQUEUE_LEN){
-                for (int i = sample; i < I2S_DEQUEUE_LEN; i++){
+            sample = i2s_dequeue(i2s_rx_buf_l, i2s_rx_buf_r, dequeue_len);
+            if (sample < dequeue_len){
+                for (int i = sample; i < dequeue_len; i++){
                     i2s_rx_buf_l[i] = 0;
                     i2s_rx_buf_r[i] = 0;
                 }
@@ -169,17 +175,16 @@ void __not_in_flash_func(dsp_core1_main)(void){
             }
         }
         else{
-            for (int i = 0; i < I2S_DEQUEUE_LEN; i++){
+            for (int i = 0; i < dequeue_len; i++){
                 i2s_rx_buf_l[i] = 0;
                 i2s_rx_buf_r[i] = 0;
             }
         }
-        sample = I2S_DEQUEUE_LEN;
+        sample = dequeue_len;
 
         // int32_tをfloat32_tに変換
         arm_q31_to_float(i2s_rx_buf_l, fir_buf_float_l_process, sample);
         arm_q31_to_float(i2s_rx_buf_r, fir_buf_float_r_process, sample);
-        freq = dsp_get_freq();
 
         // core0_task開始
         multicore_doorbell_set_other_core(doorbell_dsp);
@@ -210,10 +215,10 @@ void __not_in_flash_func(dsp_core1_main)(void){
         }
 
         // i2sバッファに格納
-        dma_sample[dma_use] = i2s_format_piodata(fir_out_buf_q31_l, fir_out_buf_q31_r, sample, dma_buf_a[dma_use], dma_buf_b[dma_use]);
+        dma_sample = i2s_format_piodata(fir_out_buf_q31_l, fir_out_buf_q31_r, sample, dma_buf_a[dma_use], dma_buf_b[dma_use]);
         // gpio_put(15, 0);
 
-        i2s_dma_transfer_bloking(dma_buf_a[dma_use], dma_buf_b[dma_use], dma_sample[dma_use]);
+        i2s_dma_transfer_blocking(dma_buf_a[dma_use], dma_buf_b[dma_use], dma_sample);
         dma_use ^= 1;
     }
 }

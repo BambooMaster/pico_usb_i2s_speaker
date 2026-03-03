@@ -28,7 +28,6 @@
 #include <string.h>
 
 #include "bsp/board_api.h"
-#include "common_types.h"
 #include "tusb.h"
 #include "usb_descriptors.h"
 
@@ -92,26 +91,13 @@ void led_blinking_task(void);
 void audio_task(void);
 void core1_main(void);
 
-#if CFG_AUDIO_DEBUG
-void audio_debug_task(void);
-uint8_t current_alt_settings;
-volatile uint16_t fifo_count;
-volatile uint32_t fifo_count_avg;
-#endif
+#define TUD_TASK_INTERVAL_US    250
+#define DEQUEUE_MAX_LEN   (CFG_TUD_AUDIO_FUNC_1_MAX_SAMPLE_RATE_FS / 2000 + 1)
 
-static uint8_t low_priority_irq_num;
-
-__isr bool tud_timer_callback(__unused struct repeating_timer *t) {
-  irq_set_pending(low_priority_irq_num);
-  return true;
-}
-
-__isr static void __time_critical_func(low_priority_worker_irq)(void) {
+__isr bool __time_critical_func(tud_timer_callback)(__unused struct repeating_timer *t) {
   tud_task();
   audio_task();
-#if CFG_AUDIO_DEBUG
-  audio_debug_task();
-#endif
+  return true;
 }
 
 /*------------- MAIN -------------*/
@@ -141,11 +127,11 @@ int main(void) {
   TU_LOG1("Speaker running\r\n");
 
   // tud_task()とaudio_task()を実行するタイマ
-  struct repeating_timer timer;
-  add_repeating_timer_us(-250, tud_timer_callback, NULL, &timer);
-  low_priority_irq_num = (uint8_t) user_irq_claim_unused(true);
-  irq_set_exclusive_handler(low_priority_irq_num, low_priority_worker_irq);
-  irq_set_enabled(low_priority_irq_num, true);
+  static struct repeating_timer tud_timer;
+  alarm_pool_t* low_prio_pool = alarm_pool_create_with_unused_hardware_alarm(1);
+  uint irq_num = hardware_alarm_get_irq_num(alarm_pool_hardware_alarm_num(low_prio_pool));
+  irq_set_priority(irq_num, PICO_LOWEST_IRQ_PRIORITY);
+  alarm_pool_add_repeating_timer_us(low_prio_pool, -TUD_TASK_INTERVAL_US, tud_timer_callback, NULL, &tud_timer);
 
   while (1) {
     dsp_core0_task();
@@ -516,10 +502,6 @@ bool tud_audio_set_itf_cb(uint8_t rhport, tusb_control_request_t const *p_reques
   if (ITF_NUM_AUDIO_STREAMING == itf && alt != 0)
     blink_interval_ms = BLINK_STREAMING;
 
-#if CFG_AUDIO_DEBUG
-  current_alt_settings = alt;
-#endif
-
   if (alt != 0) {
     current_resolution = resolutions_per_format[alt - 1];
   }
@@ -596,44 +578,6 @@ bool tud_audio_set_itf_close_ep_cb(uint8_t rhport, tusb_control_request_t const 
   return true;
 }
 
-#if 0
-void tud_audio_feedback_params_cb(uint8_t func_id, uint8_t alt_itf, audio_feedback_params_t *feedback_param) {
-  (void) func_id;
-  (void) alt_itf;
-  // Set feedback method to fifo counting
-  feedback_param->method = AUDIO_FEEDBACK_METHOD_FIFO_COUNT;
-  feedback_param->sample_freq = current_sample_rate;
-
-  // About FIFO threshold:
-  //
-  // By default the threshold is set to half FIFO size, which works well in most cases,
-  // you can reduce the threshold to have less latency.
-  //
-  // For example, here we could set the threshold to 2 ms of audio data, as audio_task() read audio data every 1 ms,
-  // having 2 ms threshold allows some margin and a quick response:
-  //
-  // feedback_param->fifo_count.fifo_threshold =
-  //    current_sample_rate * CFG_TUD_AUDIO_FUNC_1_N_CHANNELS_RX * CFG_TUD_AUDIO_FUNC_1_N_BYTES_PER_SAMPLE_RX / 1000 * 2;
-}
-#endif
-
-#if CFG_AUDIO_DEBUG
-bool tud_audio_rx_done_isr(uint8_t rhport, uint16_t n_bytes_received, uint8_t func_id, uint8_t ep_out, uint8_t cur_alt_setting) {
-  (void) rhport;
-  (void) n_bytes_received;
-  (void) func_id;
-  (void) ep_out;
-  (void) cur_alt_setting;
-
-  spk_data_size = tud_audio_read(spk_buf, n_bytes_received);
-
-  fifo_count = tud_audio_available();
-  // Same averaging method used in UAC2 class
-  fifo_count_avg = (uint32_t) (((uint64_t) fifo_count_avg * 63 + ((uint32_t) fifo_count << 16)) >> 6);
-
-  return true;
-}
-#else
 bool tud_audio_rx_done_isr(uint8_t rhport, uint16_t n_bytes_received, uint8_t func_id, uint8_t ep_out, uint8_t cur_alt_setting) {
   (void) rhport;
   (void) n_bytes_received;
@@ -645,7 +589,6 @@ bool tud_audio_rx_done_isr(uint8_t rhport, uint16_t n_bytes_received, uint8_t fu
 
   return true;
 }
-#endif
 
 //--------------------------------------------------------------------+
 // AUDIO Task
@@ -673,7 +616,7 @@ void audio_task(void) {
 
     // フィードバック処理
     int length =  i2s_get_queue_length();
-    int trget_level = I2S_DEQUEUE_LEN * 5;
+    int trget_level = i2s_get_freq() * 3 / 2000;
     uint feedback = (uint32_t)(((uint64_t)current_sample_rate << 16u) / 1000u);
 
     // フィードバックの最大値、最小値
@@ -699,6 +642,7 @@ void audio_task(void) {
 //--------------------------------------------------------------------+
 // BLINKING TASK
 //--------------------------------------------------------------------+
+#if 0
 void led_blinking_task(void) {
   static uint32_t start_ms = 0;
   static bool led_state = false;
@@ -710,119 +654,71 @@ void led_blinking_task(void) {
   board_led_write(led_state);
   led_state = 1 - led_state;
 }
-
-#if CFG_AUDIO_DEBUG
-//--------------------------------------------------------------------+
-// HID interface for audio debug
-//--------------------------------------------------------------------+
-// Every 1ms, we will sent 1 debug information report
-void audio_debug_task(void) {
-  static uint32_t start_ms = 0;
-  uint32_t curr_ms = board_millis();
-  if (start_ms == curr_ms) return;// not enough time
-  start_ms = curr_ms;
-
-  audio_debug_info_t debug_info;
-  debug_info.sample_rate = current_sample_rate;
-  debug_info.alt_settings = current_alt_settings;
-  debug_info.fifo_size = CFG_TUD_AUDIO_FUNC_1_EP_OUT_SW_BUF_SZ;
-  debug_info.fifo_count = fifo_count;
-  debug_info.fifo_count_avg = (uint16_t) (fifo_count_avg >> 16);
-  for (int i = 0; i < CFG_TUD_AUDIO_FUNC_1_N_CHANNELS_RX + 1; i++) {
-    debug_info.mute[i] = mute[i];
-    debug_info.volume[i] = volume[i];
-  }
-
-  if (tud_hid_ready())
-    tud_hid_report(0, &debug_info, sizeof(debug_info));
-}
-
-// Invoked when received GET_REPORT control request
-// Unused here
-uint16_t tud_hid_get_report_cb(uint8_t itf, uint8_t report_id, hid_report_type_t report_type, uint8_t *buffer, uint16_t reqlen) {
-  // TODO not Implemented
-  (void) itf;
-  (void) report_id;
-  (void) report_type;
-  (void) buffer;
-  (void) reqlen;
-
-  return 0;
-}
-
-// Invoked when received SET_REPORT control request or
-// Unused here
-void tud_hid_set_report_cb(uint8_t itf, uint8_t report_id, hid_report_type_t report_type, uint8_t const *buffer, uint16_t bufsize) {
-  // This example doesn't use multiple report and report ID
-  (void) itf;
-  (void) report_id;
-  (void) report_type;
-  (void) buffer;
-  (void) bufsize;
-}
-
 #endif
 
 void core1_main(void){
-  int dma_sample[2];
+  int dma_sample;
   bool mute = false;
   int buf_length;
-  static int32_t dma_buf_a[2][I2S_DEQUEUE_LEN * 2], dma_buf_b[2][I2S_DEQUEUE_LEN * 2];
+  static int32_t dma_buf_a[2][DEQUEUE_MAX_LEN * 2], dma_buf_b[2][DEQUEUE_MAX_LEN * 2];
   uint8_t dma_use = 0;
-  I2S_MODE i2s_mode = i2s_get_i2s_mode();
+  int dequeue_len;
 
   int sample;
-  int32_t buf_l[I2S_DEQUEUE_LEN], buf_r[I2S_DEQUEUE_LEN];
-
-  int words_per_frame = 2;
-  if (i2s_mode == MODE_EXDF) {
-    words_per_frame = 1;
-  }
+  int32_t buf_l[DEQUEUE_MAX_LEN], buf_r[DEQUEUE_MAX_LEN];
 
   gpio_init(PICO_DEFAULT_LED_PIN);
   gpio_set_dir(PICO_DEFAULT_LED_PIN, GPIO_OUT);
 
   while (1){
     buf_length = i2s_get_queue_length();
+    // 0.5ms分ずつi2sに送る
+    dequeue_len = i2s_get_freq() / 2000;
+    if (dequeue_len > DEQUEUE_MAX_LEN) {
+      dequeue_len = DEQUEUE_MAX_LEN;
+    }
+
     // printf("%3d\n", buf_length);
 
-    // i2sキューに規定量が溜まっていたら再生開始
+    // i2sキューが一定以上溜まったらミュート解除
     if (buf_length == 0 && mute == false){
       mute = true;
       gpio_put(PICO_DEFAULT_LED_PIN, 0);
     }
-    else if (buf_length >= (I2S_DEQUEUE_LEN * 2) && mute == true){
+    else if (buf_length >= (dequeue_len * 3) && mute == true){
       mute = false;
       gpio_put(PICO_DEFAULT_LED_PIN, 1);
     }
 
-    // i2sキューから取り出し、pioのデータ形式に変換して送信バッファに積む
     if (mute == false){
-      sample = i2s_dequeue(buf_l, buf_r, I2S_DEQUEUE_LEN);
-      dma_sample[dma_use] = i2s_format_piodata(buf_l, buf_r, sample, dma_buf_a[dma_use], dma_buf_b[dma_use]);
+      // i2sキューから取り出す
+      sample = i2s_dequeue(buf_l, buf_r, dequeue_len);
 
       // キューから取り出したデータ量が要求より少ない場合は、0埋めしてミュート状態へ
-      if (sample < I2S_DEQUEUE_LEN){
-        for (int i = dma_sample[dma_use]; i < I2S_DEQUEUE_LEN * words_per_frame; i++){
-          dma_buf_a[dma_use][i] = 0;
-          dma_buf_b[dma_use][i] = 0;
+      if (sample < dequeue_len){
+        for (int i = sample; i < dequeue_len; i++){
+          buf_l[i] = 0;
+          buf_r[i] = 0;
         }
+        sample = dequeue_len;
         mute = true;
         gpio_put(PICO_DEFAULT_LED_PIN, 0);
       }
     }
-
-    // ミュート状態の時は0を送信
     else{
-      for (int i = 0; i < I2S_DEQUEUE_LEN * words_per_frame; i++){
-        dma_buf_a[dma_use][i] = 0;
-        dma_buf_b[dma_use][i] = 0;
+      // ミュート状態の時は0を送信
+      for (int i = 0; i < dequeue_len; i++){
+        buf_l[i] = 0;
+        buf_r[i] = 0;
       }
+      sample = dequeue_len;
     }
-    dma_sample[dma_use] = I2S_DEQUEUE_LEN * words_per_frame;
+
+    // pio送信形式に変換
+    dma_sample = i2s_format_piodata(buf_l, buf_r, sample, dma_buf_a[dma_use], dma_buf_b[dma_use]);
 
     // dmaが終わるまで待機
-    i2s_dma_transfer_bloking(dma_buf_a[dma_use], dma_buf_b[dma_use], dma_sample[dma_use]);
+    i2s_dma_transfer_blocking(dma_buf_a[dma_use], dma_buf_b[dma_use], dma_sample);
     dma_use ^= 1;
   }
 }

@@ -600,13 +600,13 @@ void audio_task(void) {
   static uint32_t start_ms = 0;
 
   if (spk_data_size) {
-    static int32_t buf_l[I2S_QUEUE_MAX];
-    static int32_t buf_r[I2S_QUEUE_MAX];
+    static int32_t uac_buf_l[I2S_QUEUE_MAX];
+    static int32_t uac_buf_r[I2S_QUEUE_MAX];
 
     // i2sキューに積む
-    int rx_length = i2s_unpack_uacdata(spk_buf, spk_data_size, current_resolution, buf_l, buf_r);
-    i2s_volume(buf_l, buf_r, rx_length);
-    i2s_enqueue(buf_l, buf_r, rx_length);
+    int rx_length = i2s_unpack_uacdata(spk_buf, spk_data_size, current_resolution, uac_buf_l, uac_buf_r);
+    i2s_volume(uac_buf_l, uac_buf_r, rx_length);
+    i2s_enqueue(uac_buf_l, uac_buf_r, rx_length);
     spk_data_size = 0;
 
     // フィードバックは1msに1回
@@ -665,7 +665,7 @@ void core1_main(void){
   int dequeue_len;
 
   int sample;
-  int32_t buf_l[DEQUEUE_MAX_LEN], buf_r[DEQUEUE_MAX_LEN];
+  int32_t i2s_buf_l[DEQUEUE_MAX_LEN], i2s_buf_r[DEQUEUE_MAX_LEN];
 
   gpio_init(PICO_DEFAULT_LED_PIN);
   gpio_set_dir(PICO_DEFAULT_LED_PIN, GPIO_OUT);
@@ -692,13 +692,13 @@ void core1_main(void){
 
     if (mute == false){
       // i2sキューから取り出す
-      sample = i2s_dequeue(buf_l, buf_r, dequeue_len);
+      sample = i2s_dequeue(i2s_buf_l, i2s_buf_r, dequeue_len);
 
       // キューから取り出したデータ量が要求より少ない場合は、0埋めしてミュート状態へ
       if (sample < dequeue_len){
         for (int i = sample; i < dequeue_len; i++){
-          buf_l[i] = 0;
-          buf_r[i] = 0;
+          i2s_buf_l[i] = 0;
+          i2s_buf_r[i] = 0;
         }
         sample = dequeue_len;
         mute = true;
@@ -708,14 +708,14 @@ void core1_main(void){
     else{
       // ミュート状態の時は0を送信
       for (int i = 0; i < dequeue_len; i++){
-        buf_l[i] = 0;
-        buf_r[i] = 0;
+        i2s_buf_l[i] = 0;
+        i2s_buf_r[i] = 0;
       }
       sample = dequeue_len;
     }
 
     // pio送信形式に変換
-    dma_sample = i2s_format_piodata(buf_l, buf_r, sample, dma_buf_a[dma_use], dma_buf_b[dma_use]);
+    dma_sample = i2s_format_piodata(i2s_buf_l, i2s_buf_r, sample, dma_buf_a[dma_use], dma_buf_b[dma_use]);
 
     // dmaが終わるまで待機
     i2s_dma_transfer_blocking(dma_buf_a[dma_use], dma_buf_b[dma_use], dma_sample);

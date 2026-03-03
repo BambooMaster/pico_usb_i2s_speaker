@@ -62,6 +62,8 @@ static float32_t fir_state_r_stage2_96k[(FIR_2ND_140DB_96_TAPS / 2) + FIR_2ND_96
 // core間通信用変数
 static q31_t fir_out_buf_q31_r[FIR_DEQUEUE_MAX_LEN * 8];
 static float32_t fir_buf_float_r_process[FIR_DEQUEUE_MAX_LEN * 8];
+static int shared_sample;
+static uint32_t shared_freq;
 
 void dsp_init(void){
     // デバッグLED init
@@ -95,8 +97,8 @@ void __not_in_flash_func(dsp_core0_task)(void){
     if (multicore_doorbell_is_set_current_core(doorbell_dsp)){
         // gpio_put(14, 1);
 
-        uint32_t freq = dsp_get_freq();
-        int sample = freq / 2000;
+        uint32_t freq = shared_freq;
+        int sample = shared_sample;
         static float32_t fir_buf_float_r_temp[FIR_DEQUEUE_MAX_LEN * 8];
 
         if (freq <= 48000){
@@ -187,6 +189,8 @@ void __not_in_flash_func(dsp_core1_main)(void){
         arm_q31_to_float(i2s_rx_buf_r, fir_buf_float_r_process, sample);
 
         // core0_task開始
+        shared_sample = dequeue_len;
+        shared_freq = freq;
         multicore_doorbell_set_other_core(doorbell_dsp);
 
         if (freq <= 48000){

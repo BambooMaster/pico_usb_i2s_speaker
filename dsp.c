@@ -136,7 +136,7 @@ void __not_in_flash_func(dsp_core1_main)(void){
     uint32_t freq;
 
     int sample;
-    static int32_t i2s_rx_buf_l[FIR_DEQUEUE_MAX_LEN], i2s_rx_buf_r[FIR_DEQUEUE_MAX_LEN];
+    static int32_t i2s_buf_l[FIR_DEQUEUE_MAX_LEN], i2s_buf_r[FIR_DEQUEUE_MAX_LEN];
 
     gpio_init(PICO_DEFAULT_LED_PIN);
     gpio_set_dir(PICO_DEFAULT_LED_PIN, GPIO_OUT);
@@ -166,11 +166,11 @@ void __not_in_flash_func(dsp_core1_main)(void){
         }
 
         if (mute == false){
-            sample = i2s_dequeue(i2s_rx_buf_l, i2s_rx_buf_r, dequeue_len);
+            sample = i2s_dequeue(i2s_buf_l, i2s_buf_r, dequeue_len);
             if (sample < dequeue_len){
                 for (int i = sample; i < dequeue_len; i++){
-                    i2s_rx_buf_l[i] = 0;
-                    i2s_rx_buf_r[i] = 0;
+                    i2s_buf_l[i] = 0;
+                    i2s_buf_r[i] = 0;
                 }
                 mute = true;
                 gpio_put(PICO_DEFAULT_LED_PIN, 0);
@@ -178,15 +178,15 @@ void __not_in_flash_func(dsp_core1_main)(void){
         }
         else{
             for (int i = 0; i < dequeue_len; i++){
-                i2s_rx_buf_l[i] = 0;
-                i2s_rx_buf_r[i] = 0;
+                i2s_buf_l[i] = 0;
+                i2s_buf_r[i] = 0;
             }
         }
         sample = dequeue_len;
 
         // int32_tをfloat32_tに変換
-        arm_q31_to_float(i2s_rx_buf_l, fir_buf_float_l_process, sample);
-        arm_q31_to_float(i2s_rx_buf_r, fir_buf_float_r_process, sample);
+        arm_q31_to_float(i2s_buf_l, fir_buf_float_l_process, sample);
+        arm_q31_to_float(i2s_buf_r, fir_buf_float_r_process, sample);
 
         // core0_task開始
         shared_sample = dequeue_len;

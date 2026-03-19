@@ -50,5 +50,8 @@ mkdir build && cd build
 cmke .. && make -j4
 ```
 
-## 対応機種
-Windows11とAndroid (Pixel6a Android16)、Ubuntu 24.04で動作確認をしています。
+## 動作確認環境
+- Windows11
+- Ubuntu 24.04
+- Pixel6a (Android 16)
+- iPad Air Gen4 (iPadOS 26.3.1)

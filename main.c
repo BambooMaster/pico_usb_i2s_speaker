@@ -90,14 +90,17 @@ void led_blinking_task(void);
 void audio_task(void);
 void core1_main(void);
 void cdc_task(void);
+void hid_task(void);
 
 #define TUD_TASK_INTERVAL_US    250
 #define DEQUEUE_MAX_LEN   (CFG_TUD_AUDIO_FUNC_1_MAX_SAMPLE_RATE_FS / 2000 + 1)
+#define HID_BTN_GPIO            2
 
 __isr bool __time_critical_func(tud_timer_callback)(__unused struct repeating_timer *t) {
   tud_task();
   audio_task();
   cdc_task();
+  hid_task();
   return true;
 }
 
@@ -113,6 +116,11 @@ int main(void) {
 
   // i2s送信開始
   multicore_launch_core1(core1_main);
+
+  // HIDボタン初期化
+  gpio_init(HID_BTN_GPIO);
+  gpio_set_dir(HID_BTN_GPIO, false);
+  gpio_pull_up(HID_BTN_GPIO);
 
   // init device stack on configured roothub port
   tusb_rhport_init_t dev_init = {
@@ -755,4 +763,119 @@ void tud_cdc_line_state_cb(uint8_t itf, bool dtr, bool rts) {
 // Invoked when CDC interface received data from host
 void tud_cdc_rx_cb(uint8_t itf) {
   (void) itf;
+}
+
+//--------------------------------------------------------------------+
+// USB HID
+//--------------------------------------------------------------------+
+
+// Every 10ms, we will sent 1 report for each HID profile (keyboard, mouse etc ..)
+// tud_hid_report_complete_cb() is used to send the next report after previous one is complete
+void hid_task(void) {
+  // Poll every 10ms
+  const uint32_t  interval_ms = 10;
+  static uint32_t start_ms    = 0;
+
+  if (board_millis() - start_ms < interval_ms) {
+    return; // not enough time
+  }
+  start_ms += interval_ms;
+
+  // uint32_t const btn = board_button_read();
+  uint32_t const btn = !gpio_get(HID_BTN_GPIO);
+
+  if (tud_suspended() && btn) {
+    // Wake up host if we are in suspend mode
+    // and REMOTE_WAKEUP feature is enabled by host
+    tud_remote_wakeup();
+  } else {
+    // keyboard interface
+    if (tud_hid_n_ready(0)) {
+      // used to avoid send multiple consecutive zero report for keyboard
+      static bool has_keyboard_key = false;
+
+      uint8_t const report_id = 0;
+      uint8_t const modifier  = 0;
+
+      if (btn) {
+        uint8_t keycode[6] = {0};
+        keycode[0]         = HID_KEY_ARROW_RIGHT;
+
+        tud_hid_n_keyboard_report(0, report_id, modifier, keycode);
+        has_keyboard_key = true;
+      } else {
+        // send empty key report if previously has key pressed
+        if (has_keyboard_key) {
+          tud_hid_n_keyboard_report(0, report_id, modifier, NULL);
+        }
+        has_keyboard_key = false;
+      }
+    }
+  }
+}
+
+// Invoked when received SET_PROTOCOL request
+// protocol is either HID_PROTOCOL_BOOT (0) or HID_PROTOCOL_REPORT (1)
+void tud_hid_set_protocol_cb(uint8_t instance, uint8_t protocol) {
+  (void)instance;
+  (void)protocol;
+
+  // nothing to do since we use the same compatible boot report for both Boot and Report mode.
+  // TODO set a indicator for user
+}
+
+// Invoked when sent REPORT successfully to host
+// Application can use this to send the next report
+// Note: For composite reports, report[0] is report ID
+void tud_hid_report_complete_cb(uint8_t instance, uint8_t const *report, uint16_t len) {
+  (void)instance;
+  (void)report;
+  (void)len;
+
+  // nothing to do
+}
+
+// Invoked when received GET_REPORT control request
+// Application must fill buffer report's content and return its length.
+// Return zero will cause the stack to STALL request
+uint16_t tud_hid_get_report_cb(
+    uint8_t instance, uint8_t report_id, hid_report_type_t report_type, uint8_t *buffer, uint16_t reqlen) {
+  // TODO not Implemented
+  (void)instance;
+  (void)report_id;
+  (void)report_type;
+  (void)buffer;
+  (void)reqlen;
+
+  return 0;
+}
+
+// Invoked when received SET_REPORT control request or
+// received data on OUT endpoint ( Report ID = 0, Type = 0 )
+void tud_hid_set_report_cb(
+    uint8_t instance, uint8_t report_id, hid_report_type_t report_type, uint8_t const *buffer, uint16_t bufsize) {
+  (void)report_id;
+
+  // keyboard interface
+  if (instance == 0) {
+    // Set keyboard LED e.g Capslock, Numlock etc...
+    if (report_type == HID_REPORT_TYPE_OUTPUT) {
+      // bufsize should be (at least) 1
+      if (bufsize < 1) {
+        return;
+      }
+
+      uint8_t const kbd_leds = buffer[0];
+
+      if (kbd_leds & KEYBOARD_LED_CAPSLOCK) {
+        // Capslock On: disable blink, turn led on
+        blink_interval_ms = 0;
+        board_led_write(true);
+      } else {
+        // Caplocks Off: back to normal blink
+        board_led_write(false);
+        blink_interval_ms = BLINK_MOUNTED;
+      }
+    }
+  }
 }

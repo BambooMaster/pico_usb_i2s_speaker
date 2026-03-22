@@ -869,12 +869,12 @@ void tud_hid_set_report_cb(
 
       if (kbd_leds & KEYBOARD_LED_CAPSLOCK) {
         // Capslock On: disable blink, turn led on
-        blink_interval_ms = 0;
-        board_led_write(true);
+        // blink_interval_ms = 0;
+        // board_led_write(true);
       } else {
         // Caplocks Off: back to normal blink
-        board_led_write(false);
-        blink_interval_ms = BLINK_MOUNTED;
+        // board_led_write(false);
+        // blink_interval_ms = BLINK_MOUNTED;
       }
     }
   }

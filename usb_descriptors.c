@@ -94,9 +94,12 @@ uint8_t const * tud_descriptor_device_cb(void) {
 #else
   #define EPNUM_AUDIO       0x01
   #define EPNUM_AUDIO_FB    0x01
+  #define EPNUM_CDC_NOTIF   0x82
+  #define EPNUM_CDC_OUT     0x03
+  #define EPNUM_CDC_IN      0x83
 #endif
 
-#define CONFIG_UAC1_TOTAL_LEN    	(TUD_CONFIG_DESC_LEN + TUD_AUDIO10_SPEAKER_STEREO_FB_DESC_LEN(4))
+#define CONFIG_UAC1_TOTAL_LEN    	(TUD_CONFIG_DESC_LEN + TUD_AUDIO10_SPEAKER_STEREO_FB_DESC_LEN(4) + TUD_CDC_DESC_LEN)
 
 
 uint8_t const desc_uac1_configuration[] = {
@@ -105,6 +108,9 @@ uint8_t const desc_uac1_configuration[] = {
 
   // Interface number, string index, byte per sample, bit per sample, EP Out, EP size, EP feedback, sample rates (44.1kHz, 48kHz)
   TUD_AUDIO10_SPEAKER_STEREO_FB_DESCRIPTOR(ITF_NUM_AUDIO_CONTROL, 5, CFG_TUD_AUDIO_FUNC_1_FORMAT_1_N_BYTES_PER_SAMPLE_RX, CFG_TUD_AUDIO_FUNC_1_FORMAT_1_RESOLUTION_RX, EPNUM_AUDIO, CFG_TUD_AUDIO_FUNC_1_FORMAT_1_EP_OUT_SZ_FS, EPNUM_AUDIO_FB | 0x80, 44100, 48000, 88200, 96000),
+
+  // Interface number, string index, EP notification address and size, EP data address (out, in) and size.
+  TUD_CDC_DESCRIPTOR(ITF_NUM_CDC, 6, EPNUM_CDC_NOTIF, 16, EPNUM_CDC_OUT, EPNUM_CDC_IN, 64),
 
 };
 
@@ -198,6 +204,7 @@ static char const *string_desc_arr[] =
   NULL,                           // 3: Serials will use unique ID if possible
   "UAC2 Speaker",                 // 4: Audio Interface
   "UAC1 Speaker",                 // 5: UAC1 Audio Interface
+  "TinyUSB CDC",                  // 6: CDC Interface
 };
 
 static uint16_t _desc_str[32 + 1];

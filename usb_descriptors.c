@@ -85,11 +85,17 @@ uint8_t const * tud_descriptor_device_cb(void) {
   #define EPNUM_AUDIO       0x08
   #define EPNUM_AUDIO_FB    0x08
 
-#elif defined(TUD_ENDPOINT_ONE_DIRECTION_ONLY)
+#elif CFG_TUD_ENDPOINT_ONE_DIRECTION_ONLY
   // MCUs that don't support a same endpoint number with different direction IN and OUT defined in tusb_mcu.h
   //    e.g EP1 OUT & EP1 IN cannot exist together
-  #define EPNUM_AUDIO       0x02
-  #define EPNUM_AUDIO_FB    0x01
+  #if TU_CHECK_MCU(OPT_MCU_MAX32650, OPT_MCU_MAX32666, OPT_MCU_MAX32690, OPT_MCU_MAX78002)
+    // Put audio iso on EP10/11 so the 4096-byte FIFOs can back double packet buffering
+    #define EPNUM_AUDIO       0x0A
+    #define EPNUM_AUDIO_FB    0x0B
+  #else
+    #define EPNUM_AUDIO       0x02
+    #define EPNUM_AUDIO_FB    0x01
+  #endif
 
 #else
   #define EPNUM_AUDIO       0x01
@@ -127,8 +133,8 @@ TU_VERIFY_STATIC(sizeof(desc_uac2_configuration) == CONFIG_UAC2_TOTAL_LEN, "Inco
 
 // device qualifier is mostly similar to device descriptor since we don't change configuration based on speed
 tusb_desc_device_qualifier_t const desc_device_qualifier = {
-  .bLength            = sizeof(tusb_desc_device_t),
-  .bDescriptorType    = TUSB_DESC_DEVICE,
+  .bLength            = sizeof(tusb_desc_device_qualifier_t),
+  .bDescriptorType    = TUSB_DESC_DEVICE_QUALIFIER,
   .bcdUSB             = 0x0200,
 
   .bDeviceClass       = TUSB_CLASS_MISC,

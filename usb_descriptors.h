@@ -140,9 +140,9 @@ enum
   /* Class-Specific AS Interface Descriptor(4.5.2) */\
   TUD_AUDIO10_DESC_CS_AS_INT(/*_termid*/ 0x01, /*_delay*/ 0x00, /*_formattype*/ AUDIO10_DATA_FORMAT_TYPE_I_PCM),\
   /* Type I Format Type Descriptor(2.2.5) */\
-  TUD_AUDIO10_DESC_TYPE_I_FORMAT(/*_nrchannels*/ 0x02, /*_subframesize*/ _nBytesPerSample, /*_bitresolution*/ _nBitsUsedPerSample, /*_freqs*/ __VA_ARGS__),\
+  TUD_AUDIO10_DESC_TYPE_I_FORMAT(/*_nrchannels*/ 0x02, /*_subframesize*/ CFG_TUD_AUDIO_FUNC_1_FORMAT_1_N_BYTES_PER_SAMPLE_RX, /*_bitresolution*/ CFG_TUD_AUDIO_FUNC_1_FORMAT_1_RESOLUTION_RX, /*_freqs*/ __VA_ARGS__),\
   /* Standard AS Isochronous Audio Data Endpoint Descriptor(4.6.1.1) */\
-  TUD_AUDIO10_DESC_STD_AS_ISO_EP(/*_ep*/ _epout, /*_attr*/ (uint8_t) ((uint8_t)TUSB_XFER_ISOCHRONOUS | (uint8_t)TUSB_ISO_EP_ATT_ASYNCHRONOUS), /*_maxEPsize*/ _epoutsize, /*_interval*/ 0x01, /*_sync_ep*/ _epfb),\
+  TUD_AUDIO10_DESC_STD_AS_ISO_EP(/*_ep*/ _epout, /*_attr*/ (uint8_t) ((uint8_t)TUSB_XFER_ISOCHRONOUS | (uint8_t)TUSB_ISO_EP_ATT_ASYNCHRONOUS), /*_maxEPsize*/ CFG_TUD_AUDIO_FUNC_1_FORMAT_1_EP_OUT_SZ_FS, /*_interval*/ 0x01, /*_sync_ep*/ _epfb),\
   /* Class-Specific AS Isochronous Audio Data Endpoint Descriptor(4.6.1.2) */\
   TUD_AUDIO10_DESC_CS_AS_ISO_EP(/*_attr*/ AUDIO10_CS_AS_ISO_DATA_EP_ATT_SAMPLING_FRQ, /*_lockdelayunits*/ AUDIO10_CS_AS_ISO_DATA_EP_LOCK_DELAY_UNIT_UNDEFINED, /*_lockdelay*/ 0x0000),\
   /* Standard AS Isochronous Synch Endpoint Descriptor (4.6.2.1) */\

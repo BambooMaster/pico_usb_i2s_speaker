@@ -133,7 +133,7 @@ extern "C" {
 
 // AUDIO_FEEDBACK_METHOD_FIFO_COUNT needs buffer size >= 4* EP size to work correctly
 // Example read FIFO every 1ms (8 HS frames), so buffer size should be 8 times larger for HS device
-#define CFG_TUD_AUDIO_FUNC_1_EP_OUT_SW_BUF_SZ       TU_MAX(4 * TU_MAX(CFG_TUD_AUDIO_FUNC_1_FORMAT_1_EP_OUT_SZ_FS, CFG_TUD_AUDIO_FUNC_1_FORMAT_2_EP_OUT_SZ_FS), 32 * CFG_TUD_AUDIO_FUNC_1_EP_OUT_SZ_HS)
+#define CFG_TUD_AUDIO_FUNC_1_EP_OUT_SW_BUF_SZ       TU_MAX(TU_MAX(4 * CFG_TUD_AUDIO_FUNC_1_FORMAT_1_EP_OUT_SZ_FS, 4 * CFG_TUD_AUDIO_FUNC_1_FORMAT_2_EP_OUT_SZ_FS), 32 * CFG_TUD_AUDIO_FUNC_1_EP_OUT_SZ_HS)
 
 // Enable OUT EP
 #define CFG_TUD_AUDIO_ENABLE_EP_OUT                 1

@@ -598,7 +598,6 @@ void audio_task(void) {
 
     // i2sキューに積む
     int rx_length = i2s_unpack_uacdata(spk_buf, spk_data_size, current_resolution, uac_buf_l, uac_buf_r);
-    i2s_volume(uac_buf_l, uac_buf_r, rx_length);
     i2s_enqueue(uac_buf_l, uac_buf_r, rx_length);
     spk_data_size = 0;
 
@@ -706,6 +705,9 @@ void core1_main(void){
       }
       sample = dequeue_len;
     }
+
+    // 音量処理
+    i2s_volume(i2s_buf_l, i2s_buf_r, sample);
 
     // pio送信形式に変換
     dma_sample = i2s_format_piodata(i2s_buf_l, i2s_buf_r, sample, dma_buf_a[dma_use], dma_buf_b[dma_use]);

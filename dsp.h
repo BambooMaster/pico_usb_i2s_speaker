@@ -195,7 +195,4 @@ void dsp_init(void);
 void __not_in_flash_func(dsp_core0_task)(void);
 void __not_in_flash_func(dsp_core1_main)(void);
 
-void dsp_set_freq(uint32_t freq);
-uint32_t dsp_get_freq(void);
-
 #endif

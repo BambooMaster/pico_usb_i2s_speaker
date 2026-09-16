@@ -185,6 +185,9 @@ void __not_in_flash_func(dsp_core1_main)(void){
         }
         sample = dequeue_len;
 
+        // 音量処理
+        i2s_volume(i2s_buf_l, i2s_buf_r, sample);
+
         // int32_tをfloat32_tに変換
         arm_q31_to_float(i2s_buf_l, fir_buf_float_l_process, sample);
         arm_q31_to_float(i2s_buf_r, fir_buf_float_r_process, sample);

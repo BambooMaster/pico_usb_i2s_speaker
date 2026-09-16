@@ -83,19 +83,18 @@ uint8_t current_resolution;
 
 // Buffer for speaker data
 // uint16_t i2s_dummy_buffer[CFG_TUD_AUDIO_FUNC_1_EP_OUT_SW_BUF_SZ / 2];
-uint8_t spk_buf[CFG_TUD_AUDIO_FUNC_1_EP_OUT_SW_BUF_SZ];
-volatile int spk_data_size;
+// uint8_t spk_buf[CFG_TUD_AUDIO_FUNC_1_EP_OUT_SW_BUF_SZ];
+// volatile int spk_data_size;
 
-void led_blinking_task(void);
-void audio_task(void);
+// void led_blinking_task(void);
+// void audio_task(void);
 void core1_main(void);
 
-#define TUD_TASK_INTERVAL_US    250
+#define TUD_TASK_INTERVAL_US      250
 #define DEQUEUE_MAX_LEN   (CFG_TUD_AUDIO_FUNC_1_MAX_SAMPLE_RATE_FS / 2000 + 1)
 
 __isr bool __time_critical_func(tud_timer_callback)(__unused struct repeating_timer *t) {
   tud_task();
-  audio_task();
   return true;
 }
 
@@ -578,9 +577,51 @@ bool tud_audio_rx_done_isr(uint8_t rhport, uint16_t n_bytes_received, uint8_t fu
   (void) ep_out;
   (void) cur_alt_setting;
 
-  spk_data_size = tud_audio_read(spk_buf, n_bytes_received);
+  static uint8_t spk_buf[CFG_TUD_AUDIO_FUNC_1_EP_OUT_SW_BUF_SZ];
+  static int32_t uac_buf_l[I2S_QUEUE_MAX];
+  static int32_t uac_buf_r[I2S_QUEUE_MAX];
+
+  // i2sキューに積む
+  int spk_data_size = tud_audio_read(spk_buf, n_bytes_received);
+  int rx_length = i2s_unpack_uacdata(spk_buf, spk_data_size, current_resolution, uac_buf_l, uac_buf_r);
+  i2s_enqueue(uac_buf_l, uac_buf_r, rx_length);
 
   return true;
+}
+
+void tud_audio_feedback_params_cb(uint8_t func_id, uint8_t alt_itf, audio_feedback_params_t *feedback_param) {
+  (void) func_id;
+  (void) alt_itf;
+
+  feedback_param->method = AUDIO_FEEDBACK_METHOD_FREQUENCY_FIXED;
+}
+
+void tud_audio_feedback_interval_isr(uint8_t func_id, uint32_t frame_number, uint8_t interval_shift) {
+  (void) func_id;
+  (void) frame_number;
+  (void) interval_shift;
+
+  int length =  i2s_get_queue_length();
+  int trget_level = i2s_get_sample_rate_hz() * 3 / 2000;
+  uint feedback = (uint32_t)(((uint64_t)current_sample_rate << 16u) / 1000u);
+
+  // フィードバックの最大値、最小値
+  uint feedback_max = (current_sample_rate / 1000 + 1) << 16;
+  uint feedback_min = ((current_sample_rate - 1) / 1000) << 16;
+
+  // フィードバック値計算
+  if (trget_level > length){
+    feedback = feedback + (uint32_t)((uint64_t)(trget_level - length) * (feedback_max - feedback) / trget_level);
+  }
+  else{
+    feedback = feedback - (uint32_t)((uint64_t)(length - trget_level) * (feedback - feedback_min) / trget_level);
+  }
+
+  // フィードバック値を規定の値に収める
+  if (feedback > feedback_max) feedback = feedback_max;
+  if (feedback < feedback_min) feedback = feedback_min;
+
+  tud_audio_fb_set(feedback);
 }
 
 //--------------------------------------------------------------------+
@@ -589,47 +630,6 @@ bool tud_audio_rx_done_isr(uint8_t rhport, uint16_t n_bytes_received, uint8_t fu
 
 // This task simulates an audio transmit callback, one frame is sent every 1ms.
 // In a real application, this would be replaced with actual I2S transmit callback.
-void audio_task(void) {
-  static uint32_t start_ms = 0;
-
-  if (spk_data_size) {
-    static int32_t uac_buf_l[I2S_QUEUE_MAX];
-    static int32_t uac_buf_r[I2S_QUEUE_MAX];
-
-    // i2sキューに積む
-    int rx_length = i2s_unpack_uacdata(spk_buf, spk_data_size, current_resolution, uac_buf_l, uac_buf_r);
-    i2s_enqueue(uac_buf_l, uac_buf_r, rx_length);
-    spk_data_size = 0;
-
-    // フィードバックは1msに1回
-    uint32_t curr_ms = tusb_time_millis_api();
-    if (start_ms == curr_ms) return;// not enough time
-    start_ms = curr_ms;
-
-    // フィードバック処理
-    int length =  i2s_get_queue_length();
-    int trget_level = i2s_get_sample_rate_hz() * 3 / 2000;
-    uint feedback = (uint32_t)(((uint64_t)current_sample_rate << 16u) / 1000u);
-
-    // フィードバックの最大値、最小値
-    uint feedback_max = (current_sample_rate / 1000 + 1) << 16;
-    uint feedback_min = ((current_sample_rate - 1) / 1000) << 16;
-
-    // フィードバック値計算
-    if (trget_level > length){
-      feedback = feedback + (uint32_t)((uint64_t)(trget_level - length) * (feedback_max - feedback) / trget_level);
-    }
-    else{
-      feedback = feedback - (uint32_t)((uint64_t)(length - trget_level) * (feedback - feedback_min) / trget_level);
-    }
-
-    // フィードバック値を規定の値に収める
-    if (feedback > feedback_max) feedback = feedback_max;
-    if (feedback < feedback_min) feedback = feedback_min;
-
-    tud_audio_fb_set(feedback);
-  }
-}
 
 //--------------------------------------------------------------------+
 // BLINKING TASK

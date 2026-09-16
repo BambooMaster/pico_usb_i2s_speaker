@@ -34,21 +34,29 @@ lowジッタ、i2sモード
 
 ## build
 ### vscodeの拡張機能を使う場合
-```
+```bash
 git clone https://github.com/BambooMaster/pico_usb_i2s_speaker.git
 cd pico_usb_i2s_speaker
+git switch main
 git submodule update --init
 ```
-を実行した後、vscodeの拡張機能(Raspberry Pi Pico)でインポートし、ビルドしてください。
+を実行した後、vscodeの拡張機能(Raspberry Pi Pico)でインポートし、ビルドしてください。  
+interpolation機能を使用する場合は、`git switch main`を`git switch interpolation`に変更してください。
+
 
 ### vscodeの拡張機能を使わない場合
-```
+```bash
 git clone https://github.com/BambooMaster/pico_usb_i2s_speaker.git
 cd pico_usb_i2s_speaker
+git switch main
 git submodule update --init
 mkdir build && cd build
-cmke .. && make -j4
+cmake .. && make -j4
 ```
+interpolation機能を使用する場合は、`git switch main`を`git switch interpolation`に変更してください。
 
-## 対応機種
-Windows11とAndroid (Pixel6a Android16)、Ubuntu 24.04で動作確認をしています。
+## 動作確認環境
+- Windows11
+- Ubuntu 24.04
+- Pixel6a (Android 16)
+- iPad Air Gen4 (iPadOS 26.3.1)

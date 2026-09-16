@@ -101,12 +101,12 @@ __isr bool __time_critical_func(tud_timer_callback)(__unused struct repeating_ti
 
 /*------------- MAIN -------------*/
 int main(void) {
-  i2s_mclk_set_config(pio0, CLOCK_MODE_LOW_JITTER, MODE_I2S);
+  i2s_set_config(pio0, CLOCK_MODE_LOW_JITTER, MODE_I2S);
   board_init();
 
   // i2s初期化
-  i2s_mclk_set_pin(18, 20, 22);
-  i2s_mclk_init(current_sample_rate);
+  i2s_set_pin(18, 20, 22);
+  i2s_init(current_sample_rate);
   i2s_volume_change(0, 0);
 
   // i2s送信開始
@@ -177,7 +177,7 @@ static bool audio10_set_req_ep(tusb_control_request_t const *p_request, uint8_t 
         TU_VERIFY(p_request->wLength == 3);
 
         current_sample_rate = tu_unaligned_read32(pBuff) & 0x00FFFFFF;
-        i2s_mclk_change_clock(current_sample_rate);
+        i2s_change_clock(current_sample_rate);
 
         TU_LOG2("EP set current freq: %" PRIu32 "\r\n", current_sample_rate);
 
@@ -608,7 +608,7 @@ void audio_task(void) {
 
     // フィードバック処理
     int length =  i2s_get_queue_length();
-    int trget_level = i2s_get_freq() * 3 / 2000;
+    int trget_level = i2s_get_sample_rate_hz() * 3 / 2000;
     uint feedback = (uint32_t)(((uint64_t)current_sample_rate << 16u) / 1000u);
 
     // フィードバックの最大値、最小値
@@ -665,7 +665,7 @@ void core1_main(void){
   while (1){
     buf_length = i2s_get_queue_length();
     // 0.5ms分ずつi2sに送る
-    dequeue_len = i2s_get_freq() / 2000;
+    dequeue_len = i2s_get_sample_rate_hz() / 2000;
     if (dequeue_len > DEQUEUE_MAX_LEN) {
       dequeue_len = DEQUEUE_MAX_LEN;
     }

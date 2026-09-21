@@ -660,6 +660,7 @@ void led_blinking_task(void) {
 }
 #endif
 
+#if 0
 void core1_main(void){
   int dma_sample;
   bool mute = false;
@@ -729,3 +730,4 @@ void core1_main(void){
     dma_use ^= 1;
   }
 }
+#endif

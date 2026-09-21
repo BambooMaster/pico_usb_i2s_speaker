@@ -37,6 +37,7 @@
 #include "pico/multicore.h"
 
 #include "i2s.h"
+#include "dsp.h"
 
 //--------------------------------------------------------------------+
 // MACRO CONSTANT TYPEDEF PROTOTYPES
@@ -105,11 +106,11 @@ int main(void) {
 
   // i2s初期化
   i2s_set_pin(18, 20, 22);
-  i2s_init(current_sample_rate);
+  i2s_init(352800);
   i2s_volume_change(0, 0);
 
   // i2s送信開始
-  multicore_launch_core1(core1_main);
+  multicore_launch_core1(core1_main_dsp);
 
   // init device stack on configured roothub port
   tusb_rhport_init_t dev_init = {
@@ -176,7 +177,8 @@ static bool audio10_set_req_ep(tusb_control_request_t const *p_request, uint8_t 
         TU_VERIFY(p_request->wLength == 3);
 
         current_sample_rate = tu_unaligned_read32(pBuff) & 0x00FFFFFF;
-        i2s_change_clock(current_sample_rate);
+
+        dsp_set_sample_rate_hz(current_sample_rate);
 
         TU_LOG2("EP set current freq: %" PRIu32 "\r\n", current_sample_rate);
 
@@ -648,6 +650,7 @@ void led_blinking_task(void) {
 }
 #endif
 
+#if 0
 void core1_main(void){
   int dma_sample;
   bool mute = false;
@@ -717,3 +720,4 @@ void core1_main(void){
     dma_use ^= 1;
   }
 }
+#endif

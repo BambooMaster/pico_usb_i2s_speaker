@@ -166,7 +166,7 @@ void __not_in_flash_func(dsp_core1_main)(void){
         // gpio_put(15, 1);
 
         buf_length = i2s_get_queue_length();
-        freq = i2s_get_sample_rate_hz();
+        freq = dsp_get_freq();
         dequeue_len = freq / 2000;
         if (dequeue_len > FIR_DEQUEUE_MAX_LEN) {
             dequeue_len = FIR_DEQUEUE_MAX_LEN;
@@ -259,4 +259,14 @@ void __not_in_flash_func(dsp_core1_main)(void){
         i2s_dma_transfer_blocking(dma_buf_a[dma_use], dma_buf_b[dma_use], dma_sample);
         dma_use ^= 1;
     }
+}
+
+static atomic_uint dsp_freq = 44100;
+
+void dsp_set_freq(uint32_t freq){
+    atomic_store(&dsp_freq, freq);
+}
+
+uint32_t dsp_get_freq(void){
+    return atomic_load(&dsp_freq);
 }

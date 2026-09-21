@@ -182,6 +182,7 @@ static bool audio10_set_req_ep(tusb_control_request_t const *p_request, uint8_t 
         TU_VERIFY(p_request->wLength == 3);
 
         current_sample_rate = tu_unaligned_read32(pBuff) & 0x00FFFFFF;
+        dsp_set_freq(current_sample_rate);
         if (current_sample_rate % 48000 == 0){
           i2s_change_clock(384000);
         }

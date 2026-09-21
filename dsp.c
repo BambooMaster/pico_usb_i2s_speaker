@@ -64,6 +64,21 @@ static q31_t fir_out_buf_q31_r[FIR_DEQUEUE_MAX_LEN * 8];
 static float32_t fir_buf_float_r_process[FIR_DEQUEUE_MAX_LEN * 8];
 static atomic_int shared_sample;
 static atomic_uint shared_freq;
+static float gain_r;
+
+static const float gain_table[101] = {
+    1.000000000e+00f, 8.912509084e-01f, 7.943282127e-01f, 7.079457641e-01f, 6.309573650e-01f, 5.623413324e-01f, 5.011872053e-01f, 4.466835856e-01f, 3.981071711e-01f, 3.548133969e-01f,
+    3.162277639e-01f, 2.818382978e-01f, 2.511886358e-01f, 2.238721102e-01f, 1.995262355e-01f, 1.778279394e-01f, 1.584893167e-01f, 1.412537545e-01f, 1.258925349e-01f, 1.122018471e-01f,
+    1.000000015e-01f, 8.912509680e-02f, 7.943282276e-02f, 7.079457492e-02f, 6.309573352e-02f, 5.623413250e-02f, 5.011872202e-02f, 4.466835782e-02f, 3.981071711e-02f, 3.548133746e-02f,
+    3.162277490e-02f, 2.818382904e-02f, 2.511886507e-02f, 2.238721214e-02f, 1.995262317e-02f, 1.778279431e-02f, 1.584893279e-02f, 1.412537508e-02f, 1.258925442e-02f, 1.122018415e-02f,
+    9.999999776e-03f, 8.912509307e-03f, 7.943281904e-03f, 7.079457864e-03f, 6.309573539e-03f, 5.623413250e-03f, 5.011872388e-03f, 4.466835875e-03f, 3.981071524e-03f, 3.548133885e-03f,
+    3.162277630e-03f, 2.818383044e-03f, 2.511886414e-03f, 2.238721121e-03f, 1.995262224e-03f, 1.778279431e-03f, 1.584893209e-03f, 1.412537531e-03f, 1.258925418e-03f, 1.122018439e-03f,
+    1.000000047e-03f, 8.912509657e-04f, 7.943282253e-04f, 7.079457864e-04f, 6.309573655e-04f, 5.623413017e-04f, 5.011872272e-04f, 4.466835817e-04f, 3.981071641e-04f, 3.548133827e-04f,
+    3.162277571e-04f, 2.818382927e-04f, 2.511886414e-04f, 2.238721208e-04f, 1.995262282e-04f, 1.778279402e-04f, 1.584893180e-04f, 1.412537531e-04f, 1.258925477e-04f, 1.122018439e-04f,
+    9.999999747e-05f, 8.912509657e-05f, 7.943282253e-05f, 7.079458010e-05f, 6.309573655e-05f, 5.623413381e-05f, 5.011872418e-05f, 4.466835890e-05f, 3.981071859e-05f, 3.548133827e-05f,
+    3.162277790e-05f, 2.818382927e-05f, 2.511886487e-05f, 2.238721208e-05f, 1.995262392e-05f, 1.778279329e-05f, 1.584893107e-05f, 1.412537586e-05f, 1.258925386e-05f, 1.122018421e-05f,
+    9.999999747e-06f, 
+};
 
 void dsp_init(void){
     // デバッグLED init
@@ -103,7 +118,7 @@ void __not_in_flash_func(dsp_core0_task)(void){
 
         if (freq <= 48000){
             // 補完処理のゲイン補正
-            arm_scale_f32(fir_buf_float_r_process, 8.0, fir_buf_float_r_process, sample);
+            arm_scale_f32(fir_buf_float_r_process, 8.0 * gain_r, fir_buf_float_r_process, sample);
 
             arm_fir_interpolate_f32(&fir_inst_r_stage1, fir_buf_float_r_process, fir_buf_float_r_temp, sample);
             sample *= 2;
@@ -112,7 +127,7 @@ void __not_in_flash_func(dsp_core0_task)(void){
         }
         else{
             // 補完処理のゲイン補正
-            arm_scale_f32(fir_buf_float_r_process, 4.0, fir_buf_float_r_process, sample);
+            arm_scale_f32(fir_buf_float_r_process, 4.0 * gain_r, fir_buf_float_r_process, sample);
 
             arm_fir_interpolate_f32(&fir_inst_r_stage1_96k, fir_buf_float_r_process, fir_buf_float_r_temp, sample);
             sample *= 2;
@@ -135,6 +150,7 @@ void __not_in_flash_func(dsp_core1_main)(void){
     uint8_t dma_use = 0;
     int dequeue_len;
     uint32_t freq;
+    float gain_l;
 
     int sample;
     static int32_t i2s_buf_l[FIR_DEQUEUE_MAX_LEN], i2s_buf_r[FIR_DEQUEUE_MAX_LEN];
@@ -185,8 +201,21 @@ void __not_in_flash_func(dsp_core1_main)(void){
         }
         sample = dequeue_len;
 
-        // 音量処理
-        i2s_volume(i2s_buf_l, i2s_buf_r, sample);
+        // 音量設定L
+        int16_t v;
+        int16_t vol_index;
+        v = i2s_get_volume_l();
+        vol_index = -v >> 8;
+        if (vol_index > 100) vol_index = 100;
+        else if (vol_index < 0) vol_index = 0;
+        gain_l = gain_table[vol_index];
+
+        // 音量設定R
+        v = i2s_get_volume_r();
+        vol_index = -v >> 8;
+        if (vol_index > 100) vol_index = 100;
+        else if (vol_index < 0) vol_index = 0;
+        gain_r = gain_table[vol_index];
 
         // int32_tをfloat32_tに変換
         arm_q31_to_float(i2s_buf_l, fir_buf_float_l_process, sample);
@@ -200,7 +229,7 @@ void __not_in_flash_func(dsp_core1_main)(void){
 
         if (freq <= 48000){
             // 補完処理のゲイン補正
-            arm_scale_f32(fir_buf_float_l_process, 8.0, fir_buf_float_l_process, sample);
+            arm_scale_f32(fir_buf_float_l_process, 8.0 * gain_l, fir_buf_float_l_process, sample);
 
             arm_fir_interpolate_f32(&fir_inst_l_stage1, fir_buf_float_l_process, fir_buf_float_l_temp, sample);
             sample *= 2;
@@ -209,7 +238,7 @@ void __not_in_flash_func(dsp_core1_main)(void){
         }
         else{
             // 補完処理のゲイン補正
-            arm_scale_f32(fir_buf_float_l_process, 4.0, fir_buf_float_l_process, sample);
+            arm_scale_f32(fir_buf_float_l_process, 4.0 * gain_l, fir_buf_float_l_process, sample);
 
             arm_fir_interpolate_f32(&fir_inst_l_stage1_96k, fir_buf_float_l_process, fir_buf_float_l_temp, sample);
             sample *= 2;

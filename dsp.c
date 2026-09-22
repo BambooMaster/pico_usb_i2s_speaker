@@ -80,6 +80,14 @@ static const float gain_table[101] = {
     9.999999747e-06f, 
 };
 
+static int volume_to_gain(int16_t v){
+  int16_t vol_index;
+  vol_index = -v >> 8;
+  if (vol_index > 100) vol_index = 100;
+  else if (vol_index < 0) vol_index = 0;
+  return gain_table[vol_index];
+}
+
 void dsp_init(void){
     // デバッグLED init
     // gpio_init(14);
@@ -203,19 +211,12 @@ void __not_in_flash_func(dsp_core1_main)(void){
 
         // 音量設定L
         int16_t v;
-        int16_t vol_index;
         v = i2s_get_volume_l();
-        vol_index = -v >> 8;
-        if (vol_index > 100) vol_index = 100;
-        else if (vol_index < 0) vol_index = 0;
-        gain_l = gain_table[vol_index];
+        gain_l = volume_to_gain(v);
 
         // 音量設定R
         v = i2s_get_volume_r();
-        vol_index = -v >> 8;
-        if (vol_index > 100) vol_index = 100;
-        else if (vol_index < 0) vol_index = 0;
-        gain_r = gain_table[vol_index];
+        gain_r = volume_to_gain(v);
 
         // int32_tをfloat32_tに変換
         arm_q31_to_float(i2s_buf_l, fir_buf_float_l_process, sample);

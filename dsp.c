@@ -265,6 +265,20 @@ void __not_in_flash_func(dsp_core1_main)(void){
 static atomic_uint dsp_freq = 44100;
 
 void dsp_set_freq(uint32_t freq){
+    switch(freq){
+    case 44100:
+    case 88200:
+        i2s_change_clock(352800);
+        break;
+
+    case 48000:
+    case 96000:
+        i2s_change_clock(384000);
+        break;
+
+    default:
+        return;
+    }
     atomic_store(&dsp_freq, freq);
 }
 

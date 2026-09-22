@@ -183,12 +183,6 @@ static bool audio10_set_req_ep(tusb_control_request_t const *p_request, uint8_t 
 
         current_sample_rate = tu_unaligned_read32(pBuff) & 0x00FFFFFF;
         dsp_set_freq(current_sample_rate);
-        if (current_sample_rate % 48000 == 0){
-          i2s_change_clock(384000);
-        }
-        else{
-          i2s_change_clock(352800);
-        }
 
         TU_LOG2("EP set current freq: %" PRIu32 "\r\n", current_sample_rate);
 

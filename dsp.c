@@ -81,11 +81,11 @@ static const float gain_table[101] = {
 };
 
 static int volume_to_gain(int16_t v){
-  int16_t vol_index;
-  vol_index = -v >> 8;
-  if (vol_index > 100) vol_index = 100;
-  else if (vol_index < 0) vol_index = 0;
-  return gain_table[vol_index];
+    int16_t vol_index;
+    vol_index = -v >> 8;
+    if (vol_index > 100) vol_index = 100;
+    else if (vol_index < 0) vol_index = 0;
+    return gain_table[vol_index];
 }
 
 void dsp_init(void){

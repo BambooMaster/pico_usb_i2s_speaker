@@ -5,18 +5,24 @@ USBスタックには、[tinyusb](https://github.com/hathach/tinyusb.git)を使�
 
 ## Interpolation 機能
 RP2350のDSPを使用したインターポレーション（オーバーサンプリング）機能を実装しています。
-本機能は[interpolation](https://github.com/BambooMaster/pico_usb_i2s_speaker/tree/interpolation)ブランチで利用可能です。
-インターポレーション処理は、[usb_sound_card_hires](https://github.com/BambooMaster/usb_sound_card_hires/tree/interpolation)のものを使用しています。
+RP2350のデュアルコアを活かし、高性能なフィルタを実装したものが[interpolation](https://github.com/BambooMaster/pico_usb_i2s_speaker/tree/interpolation)ブランチ、シングルコアのみで実装をしたものが[interpolation-lite](https://github.com/BambooMaster/pico_usb_i2s_speaker/tree/interpolation-lite)ブランチです。
 
 ### インターポレーション倍率
 - **44.1/48kHz**: **8倍**
 - **88.2/96kHz**: **4倍**
 
 ### フィルタ特性 (44.1KHz)
+#### interpolation ブランチ
 - Passband: **20.5kHz**
 - Passband Ripple: **0.001dB**
 - Stopband: **22.05kHz**
 - Stopband Attenuation: **-140dB**
+
+#### interpolation-lite ブランチ
+- Passband: **20kHz**
+- Passband Ripple: **0.002dB**
+- Stopband: **24.1kHz**
+- Stopband Attenuation: **-100dB**
 
 ## i2s
 [pico-i2s-pio](https://github.com/BambooMaster/pico-i2s-pio.git)を使っています。RP2040/RP2350のシステムクロックをMCLKの整数倍に設定し、pioのフラクショナル分周を使わないlowジッタモードを搭載しています。  
@@ -53,7 +59,7 @@ git submodule update --init
 mkdir build && cd build
 cmake .. && make -j4
 ```
-interpolation機能を使用する場合は、`git switch main`を`git switch interpolation`に変更してください。
+interpolation機能を使用する場合は、`git switch main`を`git switch interpolation`または`git switch interpolation-lite`に変更してください。
 
 ## 動作確認環境
 - Windows11

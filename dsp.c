@@ -174,7 +174,7 @@ uint32_t dsp_get_sample_rate_hz(void){
   return atomic_load(&dsp_sample_rate_hz);
 }
 
-static int volume_to_gain(int16_t v){
+static float volume_to_gain(int16_t v){
   int16_t vol_index;
   vol_index = -v >> 8;
   if (vol_index > 100) vol_index = 100;

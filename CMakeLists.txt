@@ -28,10 +28,6 @@ set(PICO_BOARD pico2 CACHE STRING "Board type")
 # tinyusb
 set(PICO_TINYUSB_PATH ${CMAKE_SOURCE_DIR}/lib/tinyusb)
 
-# CMSIS
-set(CMSISCORE ${CMAKE_CURRENT_SOURCE_DIR}/lib/CMSIS_5/CMSIS/Core)
-add_compile_definitions(__ARM_FEATURE_DSP=1)
-
 # Pull in Raspberry Pi Pico SDK (must be before project)
 include(pico_sdk_import.cmake)
 
@@ -68,7 +64,6 @@ target_include_directories(pico_usb_i2s_speaker PRIVATE
 set(I2S_MAX_FREQ_KHZ 96)
 set(I2S_QUEUE_LEN 10)
 add_subdirectory(${CMAKE_SOURCE_DIR}/lib/pico-i2s-pio)
-add_subdirectory(${CMAKE_SOURCE_DIR}/lib/CMSIS-DSP)
 
 # Add any user requested libraries
 target_link_libraries(pico_usb_i2s_speaker
@@ -78,8 +73,14 @@ target_link_libraries(pico_usb_i2s_speaker
         tinyusb_device
         tinyusb_board
         pico-i2s-pio
-        CMSISDSP
         )
+
+target_compile_options(pico_usb_i2s_speaker PRIVATE
+        -ffp-contract=fast
+        -fno-trapping-math
+        -fno-signed-zeros
+        -Wdouble-promotion
+)
 
 pico_add_extra_outputs(pico_usb_i2s_speaker)
 

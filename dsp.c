@@ -24,110 +24,73 @@
  */
 
 #include <stdatomic.h>
+#include <string.h>
 #include "pico/stdlib.h"
-#include "arm_math.h"
 
 #include "i2s.h"
 #include "dsp.h"
 
-// 44.1kHz Fpass:20kHz Fstop:24.1kHz Apass:0.001dB Astop:100dB
-static const float fir_x8_1st_tap[] = {
-    1.5665506e-05,   3.752056e-05,-3.334434041e-06,-5.414986663e-05,-1.333830255e-06,
-  9.205318929e-05,1.057719055e-05,-0.0001451352728,-2.800235234e-05,0.0002184008772,
-  5.573674935e-05,-0.0003161516797,-9.754864732e-05,  0.00044373743,0.0001577048533,
-  -0.0006069466472,-0.000241337475,0.0008122323779,0.0003544786887,-0.001066644094,
-  -0.0005041476688, 0.001377878943,0.0006984113134,-0.001754450263,-0.0009466964402,
-   0.002205698518, 0.001259839511,-0.002742206678,-0.001650580554, 0.003376103938,
-   0.002133995527,-0.004121766426,-0.002728339517, 0.004996836651, 0.003456274513,
-  -0.006023811642,-0.004346848931, 0.007232617121, 0.005438688211,-0.008664827794,
-  -0.006785372738,  0.01038078684, 0.008464802057, -0.01247231476, -0.01059638057,
-    0.01508672163,   0.0133748604, -0.01847579703, -0.01714285463,  0.02310674265,
-     0.0225658901, -0.02995031327, -0.03113060258,  0.04139752686,  0.04697142914,
-   -0.06531880051, -0.08746524155,   0.1515951008,   0.4480950236,   0.4480950236,
-     0.1515951008, -0.08746524155, -0.06531880051,  0.04697142914,  0.04139752686,
-   -0.03113060258, -0.02995031327,   0.0225658901,  0.02310674265, -0.01714285463,
-   -0.01847579703,   0.0133748604,  0.01508672163, -0.01059638057, -0.01247231476,
-   0.008464802057,  0.01038078684,-0.006785372738,-0.008664827794, 0.005438688211,
-   0.007232617121,-0.004346848931,-0.006023811642, 0.003456274513, 0.004996836651,
-  -0.002728339517,-0.004121766426, 0.002133995527, 0.003376103938,-0.001650580554,
-  -0.002742206678, 0.001259839511, 0.002205698518,-0.0009466964402,-0.001754450263,
-  0.0006984113134, 0.001377878943,-0.0005041476688,-0.001066644094,0.0003544786887,
-  0.0008122323779,-0.000241337475,-0.0006069466472,0.0001577048533,  0.00044373743,
-  -9.754864732e-05,-0.0003161516797,5.573674935e-05,0.0002184008772,-2.800235234e-05,
-  -0.0001451352728,1.057719055e-05,9.205318929e-05,-1.333830255e-06,-5.414986663e-05,
-  -3.334434041e-06,   3.752056e-05,  1.5665506e-05
+#define DEQUEUE_LEN_X8  24
+#define DEQUEUE_LEN_X4  48
+
+#define HB_TAP_NUM(fir_len)           (((fir_len) + 1) / 4)
+#define HB_DELAY_NUM(fir_len)         (((fir_len) + 1) / 2)
+#define HB_STATE_LEN(fir_len, in_len) ((HB_DELAY_NUM(fir_len) - 1) + (in_len))
+
+// 44.1kHz Fpass:20kHz Astop:100dB
+static const float __not_in_flash("fir_coeffs") fir_x8_1st_tap[] = {
+  2.11153318e-05f, -3.59259616e-05f,  6.54839896e-05f, -1.10059111e-04f,  1.74638867e-04f, -2.65238206e-04f,  3.88988730e-04f, -5.54229607e-04f,  7.70599426e-04f, -1.04912203e-03f,
+  1.40230009e-03f, -1.84422101e-03f,  2.39068808e-03f, -3.05942240e-03f,  3.87035108e-03f, -4.84601748e-03f,  6.01221082e-03f, -7.39890451e-03f,  9.04165948e-03f, -1.09837862e-02f,
+  1.32796197e-02f, -1.59996657e-02f,  1.92387487e-02f, -2.31295663e-02f,  2.78657410e-02f, -3.37436626e-02f,  4.12427866e-02f, -5.11937210e-02f,  6.51704275e-02f, -8.65544596e-02f,
+  1.24153200e-01f, -2.10290320e-01f,  6.35978697e-01f
 };
 
-// 44.1kHz Fpass:20kHz Fstop:64.1kHz Apass:0.001dB Astop:100dB
-static const float fir_x8_2nd_tap[] = {
-  5.109819904e-05,0.0001867716637,0.0003726014111, 0.000414187205,1.489411687e-07,
-  -0.001048396458,-0.002401694423,-0.003032318549,-0.001590578817, 0.002568376018,
-   0.008202262223,  0.01182534639, 0.009035444818,-0.002556463238, -0.02020732127,
-   -0.03494691476, -0.03414940089,-0.007441996597,  0.04672127217,   0.1176327318,
-     0.1847466081,    0.225593552,    0.225593552,   0.1847466081,   0.1176327318,
-    0.04672127217,-0.007441996597, -0.03414940089, -0.03494691476, -0.02020732127,
-  -0.002556463238, 0.009035444818,  0.01182534639, 0.008202262223, 0.002568376018,
-  -0.001590578817,-0.003032318549,-0.002401694423,-0.001048396458,1.489411687e-07,
-   0.000414187205,0.0003726014111,0.0001867716637,5.109819904e-05
+// 44.1kHz Fpass:20kHz Astop:100dB
+static const float __not_in_flash("fir_coeffs") fir_x8_2nd_tap[] = {
+  -5.03897781e-04f,  4.11250476e-03f, -1.80854062e-02f,  5.76758278e-02f, -1.60646345e-01f,  6.17445722e-01f
 };
 
-// 96kHz Fpass:40kHz Fstop:52.5kHz Apass:0.001dB Astop:100dB
-static const float fir_x4_1st_tap[] = {
-  -3.523814303e-05,-4.294828614e-05,4.982847531e-05,0.0001038974369,-6.852608931e-05,
-  -0.0002174182009,7.017892494e-05,0.0003957182635,-2.846668576e-05,-0.0006556982407,
-  -8.985168097e-05,  0.00100506912,0.0003338342067, -0.00144568237,-0.0007604789571,
-   0.001961644739, 0.001440430526,-0.002521312097,-0.002449454274, 0.003066541627,
-    0.00387188606,-0.003514180193,-0.005793711171, 0.003746321425, 0.008308733813,
-  -0.003608463565, -0.01152137294, 0.002893017605,  0.01557054743,-0.001315793605,
-   -0.02067297883,-0.001552238478,  0.02723730169,  0.00644916296, -0.03615242243,
-   -0.01491540484,   0.0497116372,  0.03111260757, -0.07567728311, -0.07241614163,
-      0.163821891,      0.4342767,      0.4342767,    0.163821891, -0.07241614163,
-   -0.07567728311,  0.03111260757,   0.0497116372, -0.01491540484, -0.03615242243,
-    0.00644916296,  0.02723730169,-0.001552238478, -0.02067297883,-0.001315793605,
-    0.01557054743, 0.002893017605, -0.01152137294,-0.003608463565, 0.008308733813,
-   0.003746321425,-0.005793711171,-0.003514180193,  0.00387188606, 0.003066541627,
-  -0.002449454274,-0.002521312097, 0.001440430526, 0.001961644739,-0.0007604789571,
-   -0.00144568237,0.0003338342067,  0.00100506912,-8.985168097e-05,-0.0006556982407,
-  -2.846668576e-05,0.0003957182635,7.017892494e-05,-0.0002174182009,-6.852608931e-05,
-  0.0001038974369,4.982847531e-05,-4.294828614e-05,-3.523814303e-05
+// 44.1kHz Fpass:20kHz Astop:100dB
+static const float __not_in_flash("fir_coeffs") fir_x8_3rd_tap[] = {
+  -3.05308615e-03f,  2.67882995e-02f, -1.24565929e-01f,  6.00830415e-01f
 };
 
-// 96kHz Fpass:40kHz Fstop:52.5kHz Apass:0.001dB Astop:100dB
-static const float fir_x4_2nd_tap[] = {
-  -0.0002829428995,-0.002220998751,-0.0004318853607,  0.01359409746,  0.00944875367,
-   -0.04742092267, -0.05078744888,   0.1535621583,   0.4244935215,   0.4244935215,
-     0.1535621583, -0.05078744888, -0.04742092267,  0.00944875367,  0.01359409746,
-  -0.0004318853607,-0.002220998751,-0.0002829428995
+// 96kHz Fpass:43.5kHz Astop:100dB
+static const float __not_in_flash("fir_coeffs") fir_x4_1st_tap[] = {
+  1.96687119e-05f, -3.39592525e-05f,  6.23100367e-05f, -1.05287684e-04f,  1.67824982e-04f, -2.55886866e-04f,  3.76573379e-04f, -5.38213046e-04f,  7.50446265e-04f, -1.02432367e-03f,
+  1.37239667e-03f, -1.80882174e-03f,  2.34950574e-03f, -3.01229992e-03f,  3.81727526e-03f, -4.78714063e-03f,  5.94786389e-03f, -7.32959621e-03f,  8.96808853e-03f, -1.09068442e-02f,
+  1.32003614e-02f, -1.59192981e-02f,  1.91585911e-02f, -2.30510313e-02f,  2.77903035e-02f, -3.36727896e-02f,  4.11779195e-02f, -5.11362193e-02f,  6.51215262e-02f, -8.65152404e-02f,
+  1.24124540e-01f, -2.10272857e-01f,  6.35972830e-01f
 };
 
-#define FIR_X8_1ST_TAP_NUM (sizeof(fir_x8_1st_tap) / sizeof(fir_x8_1st_tap[0]))
-#define FIR_X8_2ND_TAP_NUM (sizeof(fir_x8_2nd_tap) / sizeof(fir_x8_2nd_tap[0]))
-#define FIR_X4_1ST_TAP_NUM (sizeof(fir_x4_1st_tap) / sizeof(fir_x4_1st_tap[0]))
-#define FIR_X4_2ND_TAP_NUM (sizeof(fir_x4_2nd_tap) / sizeof(fir_x4_2nd_tap[0]))
+// 96kHz Fpass:43.5kHz Astop:100dB
+static const float __not_in_flash("fir_coeffs") fir_x4_2nd_tap[] = {
+  -5.02622878e-04f,  4.10592295e-03f, -1.80685431e-02f,  5.76490732e-02f, -1.60619935e-01f,  6.17434528e-01f
+};
+
+#define FIR_X8_1ST_TAP_NUM 131
+#define FIR_X8_2ND_TAP_NUM 23
+#define FIR_X8_3RD_TAP_NUM 15
+#define FIR_X4_1ST_TAP_NUM 131
+#define FIR_X4_2ND_TAP_NUM 23
 
 // x8 L
-static arm_fir_interpolate_instance_f32 fir_inst_x8_1st_l;
-static arm_fir_interpolate_instance_f32 fir_inst_x8_2nd_l;
-static float fir_state_x8_1st_l[(FIR_X8_1ST_TAP_NUM / 2) + FIR_DEQUEUE_MAX_LEN - 1]     = {0.0f};
-static float fir_state_x8_2nd_l[(FIR_X8_2ND_TAP_NUM / 4) + FIR_DEQUEUE_MAX_LEN * 2 - 1] = {0.0f};
+static float fir_state_x8_1st_l[HB_STATE_LEN(FIR_X8_1ST_TAP_NUM, DEQUEUE_LEN_X8)] = {0.0f};
+static float fir_state_x8_2nd_l[HB_STATE_LEN(FIR_X8_2ND_TAP_NUM, DEQUEUE_LEN_X8 * 2)] = {0.0f};
+static float fir_state_x8_3rd_l[HB_STATE_LEN(FIR_X8_3RD_TAP_NUM, DEQUEUE_LEN_X8 * 4)] = {0.0f};
 
 // x8 R
-static arm_fir_interpolate_instance_f32 fir_inst_x8_1st_r;
-static arm_fir_interpolate_instance_f32 fir_inst_x8_2nd_r;
-static float fir_state_x8_1st_r[(FIR_X8_1ST_TAP_NUM / 2) + FIR_DEQUEUE_MAX_LEN - 1]     = {0.0f};
-static float fir_state_x8_2nd_r[(FIR_X8_2ND_TAP_NUM / 4) + FIR_DEQUEUE_MAX_LEN * 2 - 1] = {0.0f};
+static float fir_state_x8_1st_r[HB_STATE_LEN(FIR_X8_1ST_TAP_NUM, DEQUEUE_LEN_X8)] = {0.0f};
+static float fir_state_x8_2nd_r[HB_STATE_LEN(FIR_X8_2ND_TAP_NUM, DEQUEUE_LEN_X8 * 2)] = {0.0f};
+static float fir_state_x8_3rd_r[HB_STATE_LEN(FIR_X8_3RD_TAP_NUM, DEQUEUE_LEN_X8 * 4)] = {0.0f};
 
 // x4 L
-static arm_fir_interpolate_instance_f32 fir_inst_x4_1st_l;
-static arm_fir_interpolate_instance_f32 fir_inst_x4_2nd_l;
-static float fir_state_x4_1st_l[(FIR_X4_1ST_TAP_NUM / 2) + FIR_DEQUEUE_MAX_LEN - 1]     = {0.0f};
-static float fir_state_x4_2nd_l[(FIR_X4_2ND_TAP_NUM / 2) + FIR_DEQUEUE_MAX_LEN * 2 - 1] = {0.0f};
+static float fir_state_x4_1st_l[HB_STATE_LEN(FIR_X4_1ST_TAP_NUM, DEQUEUE_LEN_X4)] = {0.0f};
+static float fir_state_x4_2nd_l[HB_STATE_LEN(FIR_X4_2ND_TAP_NUM, DEQUEUE_LEN_X4 * 2)] = {0.0f};
 
 // x4 R
-static arm_fir_interpolate_instance_f32 fir_inst_x4_1st_r;
-static arm_fir_interpolate_instance_f32 fir_inst_x4_2nd_r;
-static float fir_state_x4_1st_r[(FIR_X4_1ST_TAP_NUM / 2) + FIR_DEQUEUE_MAX_LEN - 1]     = {0.0f};
-static float fir_state_x4_2nd_r[(FIR_X4_2ND_TAP_NUM / 2) + FIR_DEQUEUE_MAX_LEN * 2 - 1] = {0.0f};
+static float fir_state_x4_1st_r[HB_STATE_LEN(FIR_X4_1ST_TAP_NUM, DEQUEUE_LEN_X4)] = {0.0f};
+static float fir_state_x4_2nd_r[HB_STATE_LEN(FIR_X4_2ND_TAP_NUM, DEQUEUE_LEN_X4 * 2)] = {0.0f};
 
 // 演算用
 static float fir_temp_a_l[FIR_DEQUEUE_MAX_LEN * 8];
@@ -151,6 +114,100 @@ static const float gain_table[101] = {
   3.162277790e-05f, 2.818382927e-05f, 2.511886487e-05f, 2.238721208e-05f, 1.995262392e-05f, 1.778279329e-05f, 1.584893107e-05f, 1.412537586e-05f, 1.258925386e-05f, 1.122018421e-05f,
   9.999999747e-06f, 
 };
+
+// ハーフバンドフィルタ 2倍インターポレーション
+static inline __attribute__((always_inline)) void hb_interp2x_f32(
+  float * restrict state_l,
+  float * restrict state_r,
+  const float * restrict tap,
+  const int tap_num,
+  const int delay_num,
+  const float * restrict in_l,
+  const float * restrict in_r,
+  float * restrict out_l,
+  float * restrict out_r,
+  const int input_len
+){
+  memmove(state_l, &state_l[input_len], (delay_num - 1) * sizeof(float));
+  memmove(state_r, &state_r[input_len], (delay_num - 1) * sizeof(float));
+  memcpy(&state_l[delay_num - 1], in_l, input_len * sizeof(float));
+  memcpy(&state_r[delay_num - 1], in_r, input_len * sizeof(float));
+
+  for (int i = 0; i < input_len; i++){
+    float acc_l = 0.0f;
+    float acc_r = 0.0f;
+
+    for (int j = 0; j < tap_num; j++){
+      acc_l += (state_l[i + j] + state_l[i + (delay_num - 1) - j]) * tap[j];
+      acc_r += (state_r[i + j] + state_r[i + (delay_num - 1) - j]) * tap[j];
+    }
+
+    out_l[i * 2] = acc_l;
+    out_r[i * 2] = acc_r;
+    out_l[i * 2 + 1] = state_l[i + tap_num];
+    out_r[i * 2 + 1] = state_r[i + tap_num];
+  }
+}
+
+// 8倍インターポレーション　1回目
+static void __attribute__((noinline)) __not_in_flash_func(hb_interp2x_f32_8x_1st)(
+  const float * restrict in_l,
+  const float * restrict in_r,
+  float * restrict out_l,
+  float * restrict out_r
+){
+  hb_interp2x_f32(fir_state_x8_1st_l, fir_state_x8_1st_r, fir_x8_1st_tap,
+    HB_TAP_NUM(FIR_X8_1ST_TAP_NUM), HB_DELAY_NUM(FIR_X8_1ST_TAP_NUM),
+    in_l, in_r, out_l, out_r, DEQUEUE_LEN_X8);
+}
+
+// 8倍インターポレーション　2回目
+static void __attribute__((noinline)) __not_in_flash_func(hb_interp2x_f32_8x_2nd)(
+  const float * restrict in_l,
+  const float * restrict in_r,
+  float * restrict out_l,
+  float * restrict out_r
+){
+  hb_interp2x_f32(fir_state_x8_2nd_l, fir_state_x8_2nd_r, fir_x8_2nd_tap,
+    HB_TAP_NUM(FIR_X8_2ND_TAP_NUM), HB_DELAY_NUM(FIR_X8_2ND_TAP_NUM),
+    in_l, in_r, out_l, out_r, DEQUEUE_LEN_X8 * 2);
+}
+
+// 8倍インターポレーション　3回目
+static void __attribute__((noinline)) __not_in_flash_func(hb_interp2x_f32_8x_3rd)(
+  const float * restrict in_l,
+  const float * restrict in_r,
+  float * restrict out_l,
+  float * restrict out_r
+){
+  hb_interp2x_f32(fir_state_x8_3rd_l, fir_state_x8_3rd_r, fir_x8_3rd_tap,
+    HB_TAP_NUM(FIR_X8_3RD_TAP_NUM), HB_DELAY_NUM(FIR_X8_3RD_TAP_NUM),
+    in_l, in_r, out_l, out_r, DEQUEUE_LEN_X8 * 4);
+}
+
+// 4倍インターポレーション　1回目
+static void __attribute__((noinline)) __not_in_flash_func(hb_interp2x_f32_4x_1st)(
+  const float * restrict in_l,
+  const float * restrict in_r,
+  float * restrict out_l,
+  float * restrict out_r
+){
+  hb_interp2x_f32(fir_state_x4_1st_l, fir_state_x4_1st_r, fir_x4_1st_tap,
+    HB_TAP_NUM(FIR_X4_1ST_TAP_NUM), HB_DELAY_NUM(FIR_X4_1ST_TAP_NUM),
+    in_l, in_r, out_l, out_r, DEQUEUE_LEN_X4);
+}
+
+// 4倍インターポレーション　2回目
+static void __attribute__((noinline)) __not_in_flash_func(hb_interp2x_f32_4x_2nd)(
+  const float * restrict in_l,
+  const float * restrict in_r,
+  float * restrict out_l,
+  float * restrict out_r
+){
+  hb_interp2x_f32(fir_state_x4_2nd_l, fir_state_x4_2nd_r, fir_x4_2nd_tap,
+    HB_TAP_NUM(FIR_X4_2ND_TAP_NUM), HB_DELAY_NUM(FIR_X4_2ND_TAP_NUM),
+    in_l, in_r, out_l, out_r, DEQUEUE_LEN_X4 * 2);
+}
 
 void dsp_set_sample_rate_hz(uint32_t sample_rate_hz){
   switch(sample_rate_hz){
@@ -196,27 +253,24 @@ void core1_main_dsp(void){
   gpio_init(PICO_DEFAULT_LED_PIN);
   gpio_set_dir(PICO_DEFAULT_LED_PIN, GPIO_OUT);
 
-  // firフィルタ初期化
-  arm_fir_interpolate_init_f32(&fir_inst_x8_1st_l, 2, FIR_X8_1ST_TAP_NUM, fir_x8_1st_tap, fir_state_x8_1st_l, FIR_DEQUEUE_MAX_LEN);
-  arm_fir_interpolate_init_f32(&fir_inst_x8_2nd_l, 4, FIR_X8_2ND_TAP_NUM, fir_x8_2nd_tap, fir_state_x8_2nd_l, FIR_DEQUEUE_MAX_LEN * 2);
-
-  arm_fir_interpolate_init_f32(&fir_inst_x8_1st_r, 2, FIR_X8_1ST_TAP_NUM, fir_x8_1st_tap, fir_state_x8_1st_r, FIR_DEQUEUE_MAX_LEN);
-  arm_fir_interpolate_init_f32(&fir_inst_x8_2nd_r, 4, FIR_X8_2ND_TAP_NUM, fir_x8_2nd_tap, fir_state_x8_2nd_r, FIR_DEQUEUE_MAX_LEN * 2);
-
-  arm_fir_interpolate_init_f32(&fir_inst_x4_1st_l, 2, FIR_X4_1ST_TAP_NUM, fir_x4_1st_tap, fir_state_x4_1st_l, FIR_DEQUEUE_MAX_LEN);
-  arm_fir_interpolate_init_f32(&fir_inst_x4_2nd_l, 2, FIR_X4_2ND_TAP_NUM, fir_x4_2nd_tap, fir_state_x4_2nd_l, FIR_DEQUEUE_MAX_LEN * 2);
-
-  arm_fir_interpolate_init_f32(&fir_inst_x4_1st_r, 2, FIR_X4_1ST_TAP_NUM, fir_x4_1st_tap, fir_state_x4_1st_r, FIR_DEQUEUE_MAX_LEN);
-  arm_fir_interpolate_init_f32(&fir_inst_x4_2nd_r, 2, FIR_X4_2ND_TAP_NUM, fir_x4_2nd_tap, fir_state_x4_2nd_r, FIR_DEQUEUE_MAX_LEN * 2);
-
   while (1){
     buf_length = i2s_get_queue_length();
     int input_sample_rate_hz = dsp_get_sample_rate_hz();
     // 0.5ms分ずつi2sに送る
-    dequeue_len = input_sample_rate_hz / 2000;
-    if (dequeue_len > FIR_DEQUEUE_MAX_LEN) {
-      dequeue_len = FIR_DEQUEUE_MAX_LEN;
+    switch(input_sample_rate_hz){
+      case 44100:
+      case 48000:
+        dequeue_len = DEQUEUE_LEN_X8;
+        break;
+      case 88200:
+      case 96000:
+        dequeue_len = DEQUEUE_LEN_X4;
+        break;
     }
+
+    // if (dequeue_len > FIR_DEQUEUE_MAX_LEN) {
+    //   dequeue_len = FIR_DEQUEUE_MAX_LEN;
+    // }
 
     // printf("%3d\n", buf_length);
 
@@ -263,42 +317,35 @@ void core1_main_dsp(void){
     gain_r = volume_to_gain(v);
 
     // int32_tをfloatに変換
-    arm_q31_to_float(i2s_buf_l, fir_temp_a_l, sample);
-    arm_q31_to_float(i2s_buf_r, fir_temp_a_r, sample);
+    for (int i = 0; i < sample; i++){
+      fir_temp_b_l[i] = (float)i2s_buf_l[i] * gain_l;
+      fir_temp_b_r[i] = (float)i2s_buf_r[i] * gain_r;
+    }
 
     if (input_sample_rate_hz <= 48000){
-      // ゲイン補正・音量処理
-      arm_scale_f32(fir_temp_a_l, 8.0 * gain_l, fir_temp_b_l, sample);
-      arm_scale_f32(fir_temp_a_r, 8.0 * gain_r, fir_temp_b_r, sample);
-
       // インターポレーション
-      arm_fir_interpolate_f32(&fir_inst_x8_1st_l, fir_temp_b_l, fir_temp_a_l, sample);
-      arm_fir_interpolate_f32(&fir_inst_x8_1st_r, fir_temp_b_r, fir_temp_a_r, sample);
-      sample *= 2;
-      arm_fir_interpolate_f32(&fir_inst_x8_2nd_l, fir_temp_a_l, fir_temp_b_l, sample);
-      arm_fir_interpolate_f32(&fir_inst_x8_2nd_r, fir_temp_a_r, fir_temp_b_r, sample);
+      hb_interp2x_f32_8x_1st(fir_temp_b_l, fir_temp_b_r, fir_temp_a_l, fir_temp_a_r);
+      hb_interp2x_f32_8x_2nd(fir_temp_a_l, fir_temp_a_r, fir_temp_b_l, fir_temp_b_r);
+      hb_interp2x_f32_8x_3rd(fir_temp_b_l, fir_temp_b_r, fir_temp_a_l, fir_temp_a_r);
+      sample *= 8;
+
+      // floatをint32_tに変換
+      for (int i = 0; i < sample; i++){
+        i2s_buf_l[i] = (int32_t)fir_temp_a_l[i];
+        i2s_buf_r[i] = (int32_t)fir_temp_a_r[i];
+      }
+    }
+    else{
+      // インターポレーション
+      hb_interp2x_f32_4x_1st(fir_temp_b_l, fir_temp_b_r, fir_temp_a_l, fir_temp_a_r);
+      hb_interp2x_f32_4x_2nd(fir_temp_a_l, fir_temp_a_r, fir_temp_b_l, fir_temp_b_r);
       sample *= 4;
 
       // floatをint32_tに変換
-      arm_float_to_q31(fir_temp_b_l, i2s_buf_l, sample);
-      arm_float_to_q31(fir_temp_b_r, i2s_buf_r, sample);
-    }
-    else{
-      // ゲイン補正・音量処理
-      arm_scale_f32(fir_temp_a_l, 4.0 * gain_l, fir_temp_b_l, sample);
-      arm_scale_f32(fir_temp_a_r, 4.0 * gain_r, fir_temp_b_r, sample);
-
-      // インターポレーション
-      arm_fir_interpolate_f32(&fir_inst_x4_1st_l, fir_temp_b_l, fir_temp_a_l, sample);
-      arm_fir_interpolate_f32(&fir_inst_x4_1st_r, fir_temp_b_r, fir_temp_a_r, sample);
-      sample *= 2;
-      arm_fir_interpolate_f32(&fir_inst_x4_2nd_l, fir_temp_a_l, fir_temp_b_l, sample);
-      arm_fir_interpolate_f32(&fir_inst_x4_2nd_r, fir_temp_a_r, fir_temp_b_r, sample);
-      sample *= 2;
-
-      // floatをint32_tに変換
-      arm_float_to_q31(fir_temp_b_l, i2s_buf_l, sample);
-      arm_float_to_q31(fir_temp_b_r, i2s_buf_r, sample);
+      for (int i = 0; i < sample; i++){
+        i2s_buf_l[i] = (int32_t)fir_temp_b_l[i];
+        i2s_buf_r[i] = (int32_t)fir_temp_b_r[i];
+      }
     }
 
     // pio送信形式に変換

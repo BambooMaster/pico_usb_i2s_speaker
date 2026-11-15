@@ -602,8 +602,10 @@ void tud_audio_feedback_interval_isr(uint8_t func_id, uint32_t frame_number, uin
   (void) interval_shift;
 
   int length =  i2s_get_queue_length();
-  int trget_level = i2s_get_sample_rate_hz() * 3 / 2000;
+  int trget_level = current_sample_rate * 3 / 2000;
   uint feedback = (uint32_t)(((uint64_t)current_sample_rate << 16u) / 1000u);
+
+  // printf("%3d\n", length);
 
   // フィードバックの最大値、最小値
   uint feedback_max = (current_sample_rate / 1000 + 1) << 16;

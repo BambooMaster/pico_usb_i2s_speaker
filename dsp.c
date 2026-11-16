@@ -75,22 +75,22 @@ static const float __not_in_flash("fir_coeffs") fir_x4_2nd_tap[] = {
 #define FIR_X4_2ND_TAP_NUM 23
 
 // x8 L
-static float fir_state_x8_1st_l[HB_STATE_LEN(FIR_X8_1ST_TAP_NUM, DEQUEUE_LEN_X8)] = {0.0f};
-static float fir_state_x8_2nd_l[HB_STATE_LEN(FIR_X8_2ND_TAP_NUM, DEQUEUE_LEN_X8 * 2)] = {0.0f};
-static float fir_state_x8_3rd_l[HB_STATE_LEN(FIR_X8_3RD_TAP_NUM, DEQUEUE_LEN_X8 * 4)] = {0.0f};
+static float __attribute__((aligned(8))) fir_state_x8_1st_l[HB_STATE_LEN(FIR_X8_1ST_TAP_NUM, DEQUEUE_LEN_X8)] = {0.0f};
+static float __attribute__((aligned(8))) fir_state_x8_2nd_l[HB_STATE_LEN(FIR_X8_2ND_TAP_NUM, DEQUEUE_LEN_X8 * 2)] = {0.0f};
+static float __attribute__((aligned(8))) fir_state_x8_3rd_l[HB_STATE_LEN(FIR_X8_3RD_TAP_NUM, DEQUEUE_LEN_X8 * 4)] = {0.0f};
 
 // x8 R
-static float fir_state_x8_1st_r[HB_STATE_LEN(FIR_X8_1ST_TAP_NUM, DEQUEUE_LEN_X8)] = {0.0f};
-static float fir_state_x8_2nd_r[HB_STATE_LEN(FIR_X8_2ND_TAP_NUM, DEQUEUE_LEN_X8 * 2)] = {0.0f};
-static float fir_state_x8_3rd_r[HB_STATE_LEN(FIR_X8_3RD_TAP_NUM, DEQUEUE_LEN_X8 * 4)] = {0.0f};
+static float __attribute__((aligned(8))) fir_state_x8_1st_r[HB_STATE_LEN(FIR_X8_1ST_TAP_NUM, DEQUEUE_LEN_X8)] = {0.0f};
+static float __attribute__((aligned(8))) fir_state_x8_2nd_r[HB_STATE_LEN(FIR_X8_2ND_TAP_NUM, DEQUEUE_LEN_X8 * 2)] = {0.0f};
+static float __attribute__((aligned(8))) fir_state_x8_3rd_r[HB_STATE_LEN(FIR_X8_3RD_TAP_NUM, DEQUEUE_LEN_X8 * 4)] = {0.0f};
 
 // x4 L
-static float fir_state_x4_1st_l[HB_STATE_LEN(FIR_X4_1ST_TAP_NUM, DEQUEUE_LEN_X4)] = {0.0f};
-static float fir_state_x4_2nd_l[HB_STATE_LEN(FIR_X4_2ND_TAP_NUM, DEQUEUE_LEN_X4 * 2)] = {0.0f};
+static float __attribute__((aligned(8))) fir_state_x4_1st_l[HB_STATE_LEN(FIR_X4_1ST_TAP_NUM, DEQUEUE_LEN_X4)] = {0.0f};
+static float __attribute__((aligned(8))) fir_state_x4_2nd_l[HB_STATE_LEN(FIR_X4_2ND_TAP_NUM, DEQUEUE_LEN_X4 * 2)] = {0.0f};
 
 // x4 R
-static float fir_state_x4_1st_r[HB_STATE_LEN(FIR_X4_1ST_TAP_NUM, DEQUEUE_LEN_X4)] = {0.0f};
-static float fir_state_x4_2nd_r[HB_STATE_LEN(FIR_X4_2ND_TAP_NUM, DEQUEUE_LEN_X4 * 2)] = {0.0f};
+static float __attribute__((aligned(8))) fir_state_x4_1st_r[HB_STATE_LEN(FIR_X4_1ST_TAP_NUM, DEQUEUE_LEN_X4)] = {0.0f};
+static float __attribute__((aligned(8))) fir_state_x4_2nd_r[HB_STATE_LEN(FIR_X4_2ND_TAP_NUM, DEQUEUE_LEN_X4 * 2)] = {0.0f};
 
 // 演算用
 static float fir_temp_a_l[FIR_DEQUEUE_MAX_LEN * 8];
@@ -116,54 +116,80 @@ static const float gain_table[101] = {
 };
 
 // ハーフバンドフィルタ 2倍インターポレーション
-// 入力サンプル数は2の倍数
+// 入力サンプル数は4の倍数
 static inline __attribute__((always_inline)) void hb_interp2x_f32(
-  float * restrict state_l,
-  float * restrict state_r,
+  float * restrict state,
   const float * restrict tap,
   const int tap_num,
   const int delay_num,
-  const float * restrict in_l,
-  const float * restrict in_r,
-  float * restrict out_l,
-  float * restrict out_r,
+  const float * restrict in,
+  float * restrict out,
   const int input_len
 ){
-  memmove(state_l, &state_l[input_len], (delay_num - 1) * sizeof(float));
-  memmove(state_r, &state_r[input_len], (delay_num - 1) * sizeof(float));
-  memcpy(&state_l[delay_num - 1], in_l, input_len * sizeof(float));
-  memcpy(&state_r[delay_num - 1], in_r, input_len * sizeof(float));
+  memmove(state, &state[input_len], (delay_num - 1) * sizeof(float));
+  memcpy(&state[delay_num - 1], in, input_len * sizeof(float));
 
-  for (int i = 0; i < input_len; i += 2){
-    float acc_l0 = 0.0f, acc_l1 = 0.0f;
-    float acc_r0 = 0.0f, acc_r1 = 0.0f;
+  for (int i = 0; i < input_len; i += 4){
+    float acc_0 = 0.0f, acc_1 = 0.0f, acc_2 = 0.0f, acc_3 = 0.0f;
 
-    for (int j = 0; j < tap_num; j++){
-      const float c = tap[j];
-      const float sl_f0 = state_l[i + j];
-      const float sl_b0 = state_l[i + (delay_num - 1) - j];
-      const float sr_f0 = state_r[i + j];
-      const float sr_b0 = state_r[i + (delay_num - 1) - j];
-      const float sl_f1 = state_l[i + 1 + j];
-      const float sl_b1 = state_l[i + 1 + (delay_num - 1) - j];
-      const float sr_f1 = state_r[i + 1 + j];
-      const float sr_b1 = state_r[i + 1 + (delay_num - 1) - j];
+    if (tap_num >= 8){
+      int j = 0;
+      for (; j <= tap_num - 4; j += 4){
+        const float c0 = tap[j];
+        acc_0 += (state[i + j + 0] + state[i + (delay_num - 1) - j + 0]) * c0;
+        acc_1 += (state[i + 1 + j] + state[i + 1 + (delay_num - 1) - j]) * c0;
+        acc_2 += (state[i + 2 + j] + state[i + 2 + (delay_num - 1) - j]) * c0;
+        acc_3 += (state[i + 3 + j] + state[i + 3 + (delay_num - 1) - j]) * c0;
 
-      acc_l0 +=(sl_f0 + sl_b0) * c;
-      acc_r0 +=(sr_f0 + sr_b0) * c;
-      acc_l1 +=(sl_f1 + sl_b1) * c;
-      acc_r1 +=(sr_f1 + sr_b1) * c;
+        const float c1 = tap[j + 1];
+        acc_0 += (state[i + 0 + j + 1] + state[i + 0 + (delay_num - 1) - j - 1]) * c1;
+        acc_1 += (state[i + 1 + j + 1] + state[i + 1 + (delay_num - 1) - j - 1]) * c1;
+        acc_2 += (state[i + 2 + j + 1] + state[i + 2 + (delay_num - 1) - j - 1]) * c1;
+        acc_3 += (state[i + 3 + j + 1] + state[i + 3 + (delay_num - 1) - j - 1]) * c1;
+
+        const float c2 = tap[j + 2];
+        acc_0 += (state[i + 0 + j + 2] + state[i + 0 + (delay_num - 1) - j - 2]) * c2;
+        acc_1 += (state[i + 1 + j + 2] + state[i + 1 + (delay_num - 1) - j - 2]) * c2;
+        acc_2 += (state[i + 2 + j + 2] + state[i + 2 + (delay_num - 1) - j - 2]) * c2;
+        acc_3 += (state[i + 3 + j + 2] + state[i + 3 + (delay_num - 1) - j - 2]) * c2;
+
+        const float c3 = tap[j + 3];
+        acc_0 += (state[i + 0 + j + 3] + state[i + 0 + (delay_num - 1) - j - 3]) * c3;
+        acc_1 += (state[i + 1 + j + 3] + state[i + 1 + (delay_num - 1) - j - 3]) * c3;
+        acc_2 += (state[i + 2 + j + 3] + state[i + 2 + (delay_num - 1) - j - 3]) * c3;
+        acc_3 += (state[i + 3 + j + 3] + state[i + 3 + (delay_num - 1) - j - 3]) * c3;
+      }
+      for (; j < tap_num; j++){
+        const float c = tap[j];
+        acc_0 += (state[i + 0 + j] + state[i + 0 + (delay_num - 1) - j]) * c;
+        acc_1 += (state[i + 1 + j] + state[i + 1 + (delay_num - 1) - j]) * c;
+        acc_2 += (state[i + 2 + j] + state[i + 2 + (delay_num - 1) - j]) * c;
+        acc_3 += (state[i + 3 + j] + state[i + 3 + (delay_num - 1) - j]) * c;
+      }
+    }
+    else {
+      const float *pf = &state[i];
+      asm volatile("" : "+r"(pf));
+      const float *pb = &pf[delay_num - 1];
+
+      for (int j = 0; j < tap_num; j++){
+        const float c = tap[j];
+        acc_0 += (pf[j] + pb[- j]) * c;
+        acc_1 += (pf[j + 1] + pb[- j + 1]) * c;
+        acc_2 += (pf[j + 2] + pb[- j + 2]) * c;
+        acc_3 += (pf[j + 3] + pb[- j + 3]) * c;
+      }
     }
 
-    out_l[i * 2] = acc_l0;
-    out_r[i * 2] = acc_r0;
-    out_l[i * 2 + 2] = acc_l1;
-    out_r[i * 2 + 2] = acc_r1;
+    out[i * 2 + 0] = acc_0;
+    out[i * 2 + 2] = acc_1;
+    out[i * 2 + 4] = acc_2;
+    out[i * 2 + 6] = acc_3;
 
-    out_l[i * 2 + 1] = state_l[i + tap_num];
-    out_r[i * 2 + 1] = state_r[i + tap_num];
-    out_l[i * 2 + 3] = state_l[i + 1 + tap_num];
-    out_r[i * 2 + 3] = state_r[i + 1 + tap_num];
+    out[i * 2 + 1] = state[i + 0 + tap_num];
+    out[i * 2 + 3] = state[i + 1 + tap_num];
+    out[i * 2 + 5] = state[i + 2 + tap_num];
+    out[i * 2 + 7] = state[i + 3 + tap_num];
   }
 }
 
@@ -174,9 +200,12 @@ static void __attribute__((noinline)) __not_in_flash_func(hb_interp2x_f32_8x_1st
   float * restrict out_l,
   float * restrict out_r
 ){
-  hb_interp2x_f32(fir_state_x8_1st_l, fir_state_x8_1st_r, fir_x8_1st_tap,
+  hb_interp2x_f32(fir_state_x8_1st_l, fir_x8_1st_tap,
     HB_TAP_NUM(FIR_X8_1ST_TAP_NUM), HB_DELAY_NUM(FIR_X8_1ST_TAP_NUM),
-    in_l, in_r, out_l, out_r, DEQUEUE_LEN_X8);
+    in_l, out_l, DEQUEUE_LEN_X8);
+  hb_interp2x_f32(fir_state_x8_1st_r, fir_x8_1st_tap,
+    HB_TAP_NUM(FIR_X8_1ST_TAP_NUM), HB_DELAY_NUM(FIR_X8_1ST_TAP_NUM),
+    in_r, out_r, DEQUEUE_LEN_X8);
 }
 
 // 8倍インターポレーション　2回目
@@ -186,9 +215,12 @@ static void __attribute__((noinline)) __not_in_flash_func(hb_interp2x_f32_8x_2nd
   float * restrict out_l,
   float * restrict out_r
 ){
-  hb_interp2x_f32(fir_state_x8_2nd_l, fir_state_x8_2nd_r, fir_x8_2nd_tap,
+  hb_interp2x_f32(fir_state_x8_2nd_l, fir_x8_2nd_tap,
     HB_TAP_NUM(FIR_X8_2ND_TAP_NUM), HB_DELAY_NUM(FIR_X8_2ND_TAP_NUM),
-    in_l, in_r, out_l, out_r, DEQUEUE_LEN_X8 * 2);
+    in_l, out_l, DEQUEUE_LEN_X8 * 2);
+  hb_interp2x_f32(fir_state_x8_2nd_r, fir_x8_2nd_tap,
+    HB_TAP_NUM(FIR_X8_2ND_TAP_NUM), HB_DELAY_NUM(FIR_X8_2ND_TAP_NUM),
+    in_r, out_r, DEQUEUE_LEN_X8 * 2);
 }
 
 // 8倍インターポレーション　3回目
@@ -198,9 +230,12 @@ static void __attribute__((noinline)) __not_in_flash_func(hb_interp2x_f32_8x_3rd
   float * restrict out_l,
   float * restrict out_r
 ){
-  hb_interp2x_f32(fir_state_x8_3rd_l, fir_state_x8_3rd_r, fir_x8_3rd_tap,
+  hb_interp2x_f32(fir_state_x8_3rd_l, fir_x8_3rd_tap,
     HB_TAP_NUM(FIR_X8_3RD_TAP_NUM), HB_DELAY_NUM(FIR_X8_3RD_TAP_NUM),
-    in_l, in_r, out_l, out_r, DEQUEUE_LEN_X8 * 4);
+    in_l, out_l, DEQUEUE_LEN_X8 * 4);
+  hb_interp2x_f32(fir_state_x8_3rd_r, fir_x8_3rd_tap,
+    HB_TAP_NUM(FIR_X8_3RD_TAP_NUM), HB_DELAY_NUM(FIR_X8_3RD_TAP_NUM),
+    in_r, out_r, DEQUEUE_LEN_X8 * 4);
 }
 
 // 4倍インターポレーション　1回目
@@ -210,9 +245,12 @@ static void __attribute__((noinline)) __not_in_flash_func(hb_interp2x_f32_4x_1st
   float * restrict out_l,
   float * restrict out_r
 ){
-  hb_interp2x_f32(fir_state_x4_1st_l, fir_state_x4_1st_r, fir_x4_1st_tap,
+  hb_interp2x_f32(fir_state_x4_1st_l, fir_x4_1st_tap,
     HB_TAP_NUM(FIR_X4_1ST_TAP_NUM), HB_DELAY_NUM(FIR_X4_1ST_TAP_NUM),
-    in_l, in_r, out_l, out_r, DEQUEUE_LEN_X4);
+    in_l, out_l, DEQUEUE_LEN_X4);
+  hb_interp2x_f32(fir_state_x4_1st_r, fir_x4_1st_tap,
+    HB_TAP_NUM(FIR_X4_1ST_TAP_NUM), HB_DELAY_NUM(FIR_X4_1ST_TAP_NUM),
+    in_r, out_r, DEQUEUE_LEN_X4);
 }
 
 // 4倍インターポレーション　2回目
@@ -222,9 +260,12 @@ static void __attribute__((noinline)) __not_in_flash_func(hb_interp2x_f32_4x_2nd
   float * restrict out_l,
   float * restrict out_r
 ){
-  hb_interp2x_f32(fir_state_x4_2nd_l, fir_state_x4_2nd_r, fir_x4_2nd_tap,
+  hb_interp2x_f32(fir_state_x4_2nd_l, fir_x4_2nd_tap,
     HB_TAP_NUM(FIR_X4_2ND_TAP_NUM), HB_DELAY_NUM(FIR_X4_2ND_TAP_NUM),
-    in_l, in_r, out_l, out_r, DEQUEUE_LEN_X4 * 2);
+    in_l, out_l, DEQUEUE_LEN_X4 * 2);
+  hb_interp2x_f32(fir_state_x4_2nd_r, fir_x4_2nd_tap,
+    HB_TAP_NUM(FIR_X4_2ND_TAP_NUM), HB_DELAY_NUM(FIR_X4_2ND_TAP_NUM),
+    in_r, out_r, DEQUEUE_LEN_X4 * 2);
 }
 
 void dsp_set_sample_rate_hz(uint32_t sample_rate_hz){

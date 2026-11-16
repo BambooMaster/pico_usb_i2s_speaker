@@ -116,6 +116,7 @@ static const float gain_table[101] = {
 };
 
 // ハーフバンドフィルタ 2倍インターポレーション
+// 入力サンプル数は2の倍数
 static inline __attribute__((always_inline)) void hb_interp2x_f32(
   float * restrict state_l,
   float * restrict state_r,
@@ -133,19 +134,36 @@ static inline __attribute__((always_inline)) void hb_interp2x_f32(
   memcpy(&state_l[delay_num - 1], in_l, input_len * sizeof(float));
   memcpy(&state_r[delay_num - 1], in_r, input_len * sizeof(float));
 
-  for (int i = 0; i < input_len; i++){
-    float acc_l = 0.0f;
-    float acc_r = 0.0f;
+  for (int i = 0; i < input_len; i += 2){
+    float acc_l0 = 0.0f, acc_l1 = 0.0f;
+    float acc_r0 = 0.0f, acc_r1 = 0.0f;
 
     for (int j = 0; j < tap_num; j++){
-      acc_l += (state_l[i + j] + state_l[i + (delay_num - 1) - j]) * tap[j];
-      acc_r += (state_r[i + j] + state_r[i + (delay_num - 1) - j]) * tap[j];
+      const float c = tap[j];
+      const float sl_f0 = state_l[i + j];
+      const float sl_b0 = state_l[i + (delay_num - 1) - j];
+      const float sr_f0 = state_r[i + j];
+      const float sr_b0 = state_r[i + (delay_num - 1) - j];
+      const float sl_f1 = state_l[i + 1 + j];
+      const float sl_b1 = state_l[i + 1 + (delay_num - 1) - j];
+      const float sr_f1 = state_r[i + 1 + j];
+      const float sr_b1 = state_r[i + 1 + (delay_num - 1) - j];
+
+      acc_l0 +=(sl_f0 + sl_b0) * c;
+      acc_r0 +=(sr_f0 + sr_b0) * c;
+      acc_l1 +=(sl_f1 + sl_b1) * c;
+      acc_r1 +=(sr_f1 + sr_b1) * c;
     }
 
-    out_l[i * 2] = acc_l;
-    out_r[i * 2] = acc_r;
+    out_l[i * 2] = acc_l0;
+    out_r[i * 2] = acc_r0;
+    out_l[i * 2 + 2] = acc_l1;
+    out_r[i * 2 + 2] = acc_r1;
+
     out_l[i * 2 + 1] = state_l[i + tap_num];
     out_r[i * 2 + 1] = state_r[i + tap_num];
+    out_l[i * 2 + 3] = state_l[i + 1 + tap_num];
+    out_r[i * 2 + 3] = state_r[i + 1 + tap_num];
   }
 }
 

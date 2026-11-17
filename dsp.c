@@ -32,13 +32,15 @@
 
 #define DEQUEUE_LEN_X8  24
 #define DEQUEUE_LEN_X4  48
+#define HB_DEQUEUE_MAX_LEN MAX(DEQUEUE_LEN_X8 , DEQUEUE_LEN_X4)
 
 #define HB_TAP_NUM(fir_len)           (((fir_len) + 1) / 4)
 #define HB_DELAY_NUM(fir_len)         (((fir_len) + 1) / 2)
 #define HB_STATE_LEN(fir_len, in_len) ((HB_DELAY_NUM(fir_len) - 1) + (in_len))
 
 // 44.1kHz Fpass:20kHz Astop:100dB
-static const float __not_in_flash("fir_coeffs") fir_x8_1st_tap[] = {
+#define HB_X8_1ST_FIR_LEN 131
+static const float __not_in_flash("hb_coeffs") hb_x8_1st_coeff[] = {
   2.11153318e-05f, -3.59259616e-05f,  6.54839896e-05f, -1.10059111e-04f,  1.74638867e-04f, -2.65238206e-04f,  3.88988730e-04f, -5.54229607e-04f,  7.70599426e-04f, -1.04912203e-03f,
   1.40230009e-03f, -1.84422101e-03f,  2.39068808e-03f, -3.05942240e-03f,  3.87035108e-03f, -4.84601748e-03f,  6.01221082e-03f, -7.39890451e-03f,  9.04165948e-03f, -1.09837862e-02f,
   1.32796197e-02f, -1.59996657e-02f,  1.92387487e-02f, -2.31295663e-02f,  2.78657410e-02f, -3.37436626e-02f,  4.12427866e-02f, -5.11937210e-02f,  6.51704275e-02f, -8.65544596e-02f,
@@ -46,17 +48,20 @@ static const float __not_in_flash("fir_coeffs") fir_x8_1st_tap[] = {
 };
 
 // 44.1kHz Fpass:20kHz Astop:100dB
-static const float __not_in_flash("fir_coeffs") fir_x8_2nd_tap[] = {
+#define HB_X8_2ND_FIR_LEN 23
+static const float __not_in_flash("hb_coeffs") hb_x8_2nd_coeff[] = {
   -5.03897781e-04f,  4.11250476e-03f, -1.80854062e-02f,  5.76758278e-02f, -1.60646345e-01f,  6.17445722e-01f
 };
 
 // 44.1kHz Fpass:20kHz Astop:100dB
-static const float __not_in_flash("fir_coeffs") fir_x8_3rd_tap[] = {
+#define HB_X8_3RD_FIR_LEN 15
+static const float __not_in_flash("hb_coeffs") hb_x8_3rd_coeff[] = {
   -3.05308615e-03f,  2.67882995e-02f, -1.24565929e-01f,  6.00830415e-01f
 };
 
 // 96kHz Fpass:43.5kHz Astop:100dB
-static const float __not_in_flash("fir_coeffs") fir_x4_1st_tap[] = {
+#define HB_X4_1ST_FIR_LEN 131
+static const float __not_in_flash("hb_coeffs") hb_x4_1st_coeff[] = {
   1.96687119e-05f, -3.39592525e-05f,  6.23100367e-05f, -1.05287684e-04f,  1.67824982e-04f, -2.55886866e-04f,  3.76573379e-04f, -5.38213046e-04f,  7.50446265e-04f, -1.02432367e-03f,
   1.37239667e-03f, -1.80882174e-03f,  2.34950574e-03f, -3.01229992e-03f,  3.81727526e-03f, -4.78714063e-03f,  5.94786389e-03f, -7.32959621e-03f,  8.96808853e-03f, -1.09068442e-02f,
   1.32003614e-02f, -1.59192981e-02f,  1.91585911e-02f, -2.30510313e-02f,  2.77903035e-02f, -3.36727896e-02f,  4.11779195e-02f, -5.11362193e-02f,  6.51215262e-02f, -8.65152404e-02f,
@@ -64,39 +69,34 @@ static const float __not_in_flash("fir_coeffs") fir_x4_1st_tap[] = {
 };
 
 // 96kHz Fpass:43.5kHz Astop:100dB
-static const float __not_in_flash("fir_coeffs") fir_x4_2nd_tap[] = {
+#define HB_X4_2ND_FIR_LEN 23
+static const float __not_in_flash("hb_coeffs") hb_x4_2nd_coeff[] = {
   -5.02622878e-04f,  4.10592295e-03f, -1.80685431e-02f,  5.76490732e-02f, -1.60619935e-01f,  6.17434528e-01f
 };
 
-#define FIR_X8_1ST_TAP_NUM 131
-#define FIR_X8_2ND_TAP_NUM 23
-#define FIR_X8_3RD_TAP_NUM 15
-#define FIR_X4_1ST_TAP_NUM 131
-#define FIR_X4_2ND_TAP_NUM 23
-
 // x8 L
-static float __attribute__((aligned(8))) fir_state_x8_1st_l[HB_STATE_LEN(FIR_X8_1ST_TAP_NUM, DEQUEUE_LEN_X8)] = {0.0f};
-static float __attribute__((aligned(8))) fir_state_x8_2nd_l[HB_STATE_LEN(FIR_X8_2ND_TAP_NUM, DEQUEUE_LEN_X8 * 2)] = {0.0f};
-static float __attribute__((aligned(8))) fir_state_x8_3rd_l[HB_STATE_LEN(FIR_X8_3RD_TAP_NUM, DEQUEUE_LEN_X8 * 4)] = {0.0f};
+static float __attribute__((aligned(8))) hb_x8_1st_state_l[HB_STATE_LEN(HB_X8_1ST_FIR_LEN, DEQUEUE_LEN_X8)] = {0.0f};
+static float __attribute__((aligned(8))) hb_x8_2nd_state_l[HB_STATE_LEN(HB_X8_2ND_FIR_LEN, DEQUEUE_LEN_X8 * 2)] = {0.0f};
+static float __attribute__((aligned(8))) hb_x8_3rd_state_l[HB_STATE_LEN(HB_X8_3RD_FIR_LEN, DEQUEUE_LEN_X8 * 4)] = {0.0f};
 
 // x8 R
-static float __attribute__((aligned(8))) fir_state_x8_1st_r[HB_STATE_LEN(FIR_X8_1ST_TAP_NUM, DEQUEUE_LEN_X8)] = {0.0f};
-static float __attribute__((aligned(8))) fir_state_x8_2nd_r[HB_STATE_LEN(FIR_X8_2ND_TAP_NUM, DEQUEUE_LEN_X8 * 2)] = {0.0f};
-static float __attribute__((aligned(8))) fir_state_x8_3rd_r[HB_STATE_LEN(FIR_X8_3RD_TAP_NUM, DEQUEUE_LEN_X8 * 4)] = {0.0f};
+static float __attribute__((aligned(8))) hb_x8_1st_state_r[HB_STATE_LEN(HB_X8_1ST_FIR_LEN, DEQUEUE_LEN_X8)] = {0.0f};
+static float __attribute__((aligned(8))) hb_x8_2nd_state_r[HB_STATE_LEN(HB_X8_2ND_FIR_LEN, DEQUEUE_LEN_X8 * 2)] = {0.0f};
+static float __attribute__((aligned(8))) hb_x8_3rd_state_r[HB_STATE_LEN(HB_X8_3RD_FIR_LEN, DEQUEUE_LEN_X8 * 4)] = {0.0f};
 
 // x4 L
-static float __attribute__((aligned(8))) fir_state_x4_1st_l[HB_STATE_LEN(FIR_X4_1ST_TAP_NUM, DEQUEUE_LEN_X4)] = {0.0f};
-static float __attribute__((aligned(8))) fir_state_x4_2nd_l[HB_STATE_LEN(FIR_X4_2ND_TAP_NUM, DEQUEUE_LEN_X4 * 2)] = {0.0f};
+static float __attribute__((aligned(8))) hb_x4_1st_state_l[HB_STATE_LEN(HB_X4_1ST_FIR_LEN, DEQUEUE_LEN_X4)] = {0.0f};
+static float __attribute__((aligned(8))) hb_x4_2nd_state_l[HB_STATE_LEN(HB_X4_2ND_FIR_LEN, DEQUEUE_LEN_X4 * 2)] = {0.0f};
 
 // x4 R
-static float __attribute__((aligned(8))) fir_state_x4_1st_r[HB_STATE_LEN(FIR_X4_1ST_TAP_NUM, DEQUEUE_LEN_X4)] = {0.0f};
-static float __attribute__((aligned(8))) fir_state_x4_2nd_r[HB_STATE_LEN(FIR_X4_2ND_TAP_NUM, DEQUEUE_LEN_X4 * 2)] = {0.0f};
+static float __attribute__((aligned(8))) hb_x4_1st_state_r[HB_STATE_LEN(HB_X4_1ST_FIR_LEN, DEQUEUE_LEN_X4)] = {0.0f};
+static float __attribute__((aligned(8))) hb_x4_2nd_state_r[HB_STATE_LEN(HB_X4_2ND_FIR_LEN, DEQUEUE_LEN_X4 * 2)] = {0.0f};
 
 // 演算用
-static float fir_temp_a_l[FIR_DEQUEUE_MAX_LEN * 8];
-static float fir_temp_b_l[FIR_DEQUEUE_MAX_LEN * 8];
-static float fir_temp_a_r[FIR_DEQUEUE_MAX_LEN * 8];
-static float fir_temp_b_r[FIR_DEQUEUE_MAX_LEN * 8];
+static float hb_temp_a_l[HB_DEQUEUE_MAX_LEN * 8];
+static float hb_temp_b_l[HB_DEQUEUE_MAX_LEN * 8];
+static float hb_temp_a_r[HB_DEQUEUE_MAX_LEN * 8];
+static float hb_temp_b_r[HB_DEQUEUE_MAX_LEN * 8];
 
 static atomic_uint dsp_sample_rate_hz = 44100;
 
@@ -119,15 +119,18 @@ static const float gain_table[101] = {
 // 入力サンプル数は4の倍数
 static inline __attribute__((always_inline)) void hb_interp2x_f32(
   float * restrict state,
-  const float * restrict tap,
-  const int tap_num,
-  const int delay_num,
+  const float * restrict coeff,
+  const int fir_len,
   const float * restrict in,
   float * restrict out,
   const int input_len
 ){
-  memmove(state, &state[input_len], (delay_num - 1) * sizeof(float));
-  memcpy(&state[delay_num - 1], in, input_len * sizeof(float));
+  const int tap_num = HB_TAP_NUM(fir_len);
+  const int delay_num = HB_DELAY_NUM(fir_len);
+  const int hist_len = delay_num - 1;
+
+  memmove(state, &state[input_len], hist_len * sizeof(float));
+  memcpy(&state[hist_len], in, input_len * sizeof(float));
 
   for (int i = 0; i < input_len; i += 4){
     float acc_0 = 0.0f, acc_1 = 0.0f, acc_2 = 0.0f, acc_3 = 0.0f;
@@ -135,45 +138,45 @@ static inline __attribute__((always_inline)) void hb_interp2x_f32(
     if (tap_num >= 8){
       int j = 0;
       for (; j <= tap_num - 4; j += 4){
-        const float c0 = tap[j];
-        acc_0 += (state[i + j + 0] + state[i + (delay_num - 1) - j + 0]) * c0;
-        acc_1 += (state[i + 1 + j] + state[i + 1 + (delay_num - 1) - j]) * c0;
-        acc_2 += (state[i + 2 + j] + state[i + 2 + (delay_num - 1) - j]) * c0;
-        acc_3 += (state[i + 3 + j] + state[i + 3 + (delay_num - 1) - j]) * c0;
+        const float c0 = coeff[j];
+        acc_0 += (state[i + j + 0] + state[i + hist_len - j + 0]) * c0;
+        acc_1 += (state[i + 1 + j] + state[i + 1 + hist_len - j]) * c0;
+        acc_2 += (state[i + 2 + j] + state[i + 2 + hist_len - j]) * c0;
+        acc_3 += (state[i + 3 + j] + state[i + 3 + hist_len - j]) * c0;
 
-        const float c1 = tap[j + 1];
-        acc_0 += (state[i + 0 + j + 1] + state[i + 0 + (delay_num - 1) - j - 1]) * c1;
-        acc_1 += (state[i + 1 + j + 1] + state[i + 1 + (delay_num - 1) - j - 1]) * c1;
-        acc_2 += (state[i + 2 + j + 1] + state[i + 2 + (delay_num - 1) - j - 1]) * c1;
-        acc_3 += (state[i + 3 + j + 1] + state[i + 3 + (delay_num - 1) - j - 1]) * c1;
+        const float c1 = coeff[j + 1];
+        acc_0 += (state[i + 0 + j + 1] + state[i + 0 + hist_len - j - 1]) * c1;
+        acc_1 += (state[i + 1 + j + 1] + state[i + 1 + hist_len - j - 1]) * c1;
+        acc_2 += (state[i + 2 + j + 1] + state[i + 2 + hist_len - j - 1]) * c1;
+        acc_3 += (state[i + 3 + j + 1] + state[i + 3 + hist_len - j - 1]) * c1;
 
-        const float c2 = tap[j + 2];
-        acc_0 += (state[i + 0 + j + 2] + state[i + 0 + (delay_num - 1) - j - 2]) * c2;
-        acc_1 += (state[i + 1 + j + 2] + state[i + 1 + (delay_num - 1) - j - 2]) * c2;
-        acc_2 += (state[i + 2 + j + 2] + state[i + 2 + (delay_num - 1) - j - 2]) * c2;
-        acc_3 += (state[i + 3 + j + 2] + state[i + 3 + (delay_num - 1) - j - 2]) * c2;
+        const float c2 = coeff[j + 2];
+        acc_0 += (state[i + 0 + j + 2] + state[i + 0 + hist_len - j - 2]) * c2;
+        acc_1 += (state[i + 1 + j + 2] + state[i + 1 + hist_len - j - 2]) * c2;
+        acc_2 += (state[i + 2 + j + 2] + state[i + 2 + hist_len - j - 2]) * c2;
+        acc_3 += (state[i + 3 + j + 2] + state[i + 3 + hist_len - j - 2]) * c2;
 
-        const float c3 = tap[j + 3];
-        acc_0 += (state[i + 0 + j + 3] + state[i + 0 + (delay_num - 1) - j - 3]) * c3;
-        acc_1 += (state[i + 1 + j + 3] + state[i + 1 + (delay_num - 1) - j - 3]) * c3;
-        acc_2 += (state[i + 2 + j + 3] + state[i + 2 + (delay_num - 1) - j - 3]) * c3;
-        acc_3 += (state[i + 3 + j + 3] + state[i + 3 + (delay_num - 1) - j - 3]) * c3;
+        const float c3 = coeff[j + 3];
+        acc_0 += (state[i + 0 + j + 3] + state[i + 0 + hist_len - j - 3]) * c3;
+        acc_1 += (state[i + 1 + j + 3] + state[i + 1 + hist_len - j - 3]) * c3;
+        acc_2 += (state[i + 2 + j + 3] + state[i + 2 + hist_len - j - 3]) * c3;
+        acc_3 += (state[i + 3 + j + 3] + state[i + 3 + hist_len - j - 3]) * c3;
       }
       for (; j < tap_num; j++){
-        const float c = tap[j];
-        acc_0 += (state[i + 0 + j] + state[i + 0 + (delay_num - 1) - j]) * c;
-        acc_1 += (state[i + 1 + j] + state[i + 1 + (delay_num - 1) - j]) * c;
-        acc_2 += (state[i + 2 + j] + state[i + 2 + (delay_num - 1) - j]) * c;
-        acc_3 += (state[i + 3 + j] + state[i + 3 + (delay_num - 1) - j]) * c;
+        const float c = coeff[j];
+        acc_0 += (state[i + 0 + j] + state[i + 0 + hist_len - j]) * c;
+        acc_1 += (state[i + 1 + j] + state[i + 1 + hist_len - j]) * c;
+        acc_2 += (state[i + 2 + j] + state[i + 2 + hist_len - j]) * c;
+        acc_3 += (state[i + 3 + j] + state[i + 3 + hist_len - j]) * c;
       }
     }
     else {
       const float *pf = &state[i];
       asm volatile("" : "+r"(pf));
-      const float *pb = &pf[delay_num - 1];
+      const float *pb = &pf[hist_len];
 
       for (int j = 0; j < tap_num; j++){
-        const float c = tap[j];
+        const float c = coeff[j];
         acc_0 += (pf[j] + pb[- j]) * c;
         acc_1 += (pf[j + 1] + pb[- j + 1]) * c;
         acc_2 += (pf[j + 2] + pb[- j + 2]) * c;
@@ -194,77 +197,67 @@ static inline __attribute__((always_inline)) void hb_interp2x_f32(
 }
 
 // 8倍インターポレーション　1回目
-static void __attribute__((noinline)) __not_in_flash_func(hb_interp2x_f32_8x_1st)(
+static void __attribute__((noinline)) __not_in_flash_func(hb_interp2x_f32_x8_1st)(
   const float * restrict in_l,
   const float * restrict in_r,
   float * restrict out_l,
   float * restrict out_r
 ){
-  hb_interp2x_f32(fir_state_x8_1st_l, fir_x8_1st_tap,
-    HB_TAP_NUM(FIR_X8_1ST_TAP_NUM), HB_DELAY_NUM(FIR_X8_1ST_TAP_NUM),
+  hb_interp2x_f32(hb_x8_1st_state_l, hb_x8_1st_coeff, HB_X8_1ST_FIR_LEN,
     in_l, out_l, DEQUEUE_LEN_X8);
-  hb_interp2x_f32(fir_state_x8_1st_r, fir_x8_1st_tap,
-    HB_TAP_NUM(FIR_X8_1ST_TAP_NUM), HB_DELAY_NUM(FIR_X8_1ST_TAP_NUM),
+  hb_interp2x_f32(hb_x8_1st_state_r, hb_x8_1st_coeff, HB_X8_1ST_FIR_LEN,
     in_r, out_r, DEQUEUE_LEN_X8);
 }
 
 // 8倍インターポレーション　2回目
-static void __attribute__((noinline)) __not_in_flash_func(hb_interp2x_f32_8x_2nd)(
+static void __attribute__((noinline)) __not_in_flash_func(hb_interp2x_f32_x8_2nd)(
   const float * restrict in_l,
   const float * restrict in_r,
   float * restrict out_l,
   float * restrict out_r
 ){
-  hb_interp2x_f32(fir_state_x8_2nd_l, fir_x8_2nd_tap,
-    HB_TAP_NUM(FIR_X8_2ND_TAP_NUM), HB_DELAY_NUM(FIR_X8_2ND_TAP_NUM),
+  hb_interp2x_f32(hb_x8_2nd_state_l, hb_x8_2nd_coeff, HB_X8_2ND_FIR_LEN,
     in_l, out_l, DEQUEUE_LEN_X8 * 2);
-  hb_interp2x_f32(fir_state_x8_2nd_r, fir_x8_2nd_tap,
-    HB_TAP_NUM(FIR_X8_2ND_TAP_NUM), HB_DELAY_NUM(FIR_X8_2ND_TAP_NUM),
+  hb_interp2x_f32(hb_x8_2nd_state_r, hb_x8_2nd_coeff, HB_X8_2ND_FIR_LEN,
     in_r, out_r, DEQUEUE_LEN_X8 * 2);
 }
 
 // 8倍インターポレーション　3回目
-static void __attribute__((noinline)) __not_in_flash_func(hb_interp2x_f32_8x_3rd)(
+static void __attribute__((noinline)) __not_in_flash_func(hb_interp2x_f32_x8_3rd)(
   const float * restrict in_l,
   const float * restrict in_r,
   float * restrict out_l,
   float * restrict out_r
 ){
-  hb_interp2x_f32(fir_state_x8_3rd_l, fir_x8_3rd_tap,
-    HB_TAP_NUM(FIR_X8_3RD_TAP_NUM), HB_DELAY_NUM(FIR_X8_3RD_TAP_NUM),
+  hb_interp2x_f32(hb_x8_3rd_state_l, hb_x8_3rd_coeff, HB_X8_3RD_FIR_LEN,
     in_l, out_l, DEQUEUE_LEN_X8 * 4);
-  hb_interp2x_f32(fir_state_x8_3rd_r, fir_x8_3rd_tap,
-    HB_TAP_NUM(FIR_X8_3RD_TAP_NUM), HB_DELAY_NUM(FIR_X8_3RD_TAP_NUM),
+  hb_interp2x_f32(hb_x8_3rd_state_r, hb_x8_3rd_coeff, HB_X8_3RD_FIR_LEN,
     in_r, out_r, DEQUEUE_LEN_X8 * 4);
 }
 
 // 4倍インターポレーション　1回目
-static void __attribute__((noinline)) __not_in_flash_func(hb_interp2x_f32_4x_1st)(
+static void __attribute__((noinline)) __not_in_flash_func(hb_interp2x_f32_x4_1st)(
   const float * restrict in_l,
   const float * restrict in_r,
   float * restrict out_l,
   float * restrict out_r
 ){
-  hb_interp2x_f32(fir_state_x4_1st_l, fir_x4_1st_tap,
-    HB_TAP_NUM(FIR_X4_1ST_TAP_NUM), HB_DELAY_NUM(FIR_X4_1ST_TAP_NUM),
+  hb_interp2x_f32(hb_x4_1st_state_l, hb_x4_1st_coeff, HB_X4_1ST_FIR_LEN,
     in_l, out_l, DEQUEUE_LEN_X4);
-  hb_interp2x_f32(fir_state_x4_1st_r, fir_x4_1st_tap,
-    HB_TAP_NUM(FIR_X4_1ST_TAP_NUM), HB_DELAY_NUM(FIR_X4_1ST_TAP_NUM),
+  hb_interp2x_f32(hb_x4_1st_state_r, hb_x4_1st_coeff, HB_X4_1ST_FIR_LEN,
     in_r, out_r, DEQUEUE_LEN_X4);
 }
 
 // 4倍インターポレーション　2回目
-static void __attribute__((noinline)) __not_in_flash_func(hb_interp2x_f32_4x_2nd)(
+static void __attribute__((noinline)) __not_in_flash_func(hb_interp2x_f32_x4_2nd)(
   const float * restrict in_l,
   const float * restrict in_r,
   float * restrict out_l,
   float * restrict out_r
 ){
-  hb_interp2x_f32(fir_state_x4_2nd_l, fir_x4_2nd_tap,
-    HB_TAP_NUM(FIR_X4_2ND_TAP_NUM), HB_DELAY_NUM(FIR_X4_2ND_TAP_NUM),
+  hb_interp2x_f32(hb_x4_2nd_state_l, hb_x4_2nd_coeff, HB_X4_2ND_FIR_LEN,
     in_l, out_l, DEQUEUE_LEN_X4 * 2);
-  hb_interp2x_f32(fir_state_x4_2nd_r, fir_x4_2nd_tap,
-    HB_TAP_NUM(FIR_X4_2ND_TAP_NUM), HB_DELAY_NUM(FIR_X4_2ND_TAP_NUM),
+  hb_interp2x_f32(hb_x4_2nd_state_r, hb_x4_2nd_coeff, HB_X4_2ND_FIR_LEN,
     in_r, out_r, DEQUEUE_LEN_X4 * 2);
 }
 
@@ -302,12 +295,12 @@ void core1_main_dsp(void){
   int dma_sample;
   bool mute = false;
   int buf_length;
-  static int32_t dma_buf_a[2][FIR_DEQUEUE_MAX_LEN * 2 * 8], dma_buf_b[2][FIR_DEQUEUE_MAX_LEN * 2 * 8];
+  static int32_t dma_buf_a[2][HB_DEQUEUE_MAX_LEN * 2 * 8], dma_buf_b[2][HB_DEQUEUE_MAX_LEN * 2 * 8];
   uint8_t dma_use = 0;
   int dequeue_len;
 
   int sample;
-  int32_t i2s_buf_l[FIR_DEQUEUE_MAX_LEN * 8], i2s_buf_r[FIR_DEQUEUE_MAX_LEN * 8];
+  int32_t i2s_buf_l[HB_DEQUEUE_MAX_LEN * 8], i2s_buf_r[HB_DEQUEUE_MAX_LEN * 8];
 
   gpio_init(PICO_DEFAULT_LED_PIN);
   gpio_set_dir(PICO_DEFAULT_LED_PIN, GPIO_OUT);
@@ -327,8 +320,8 @@ void core1_main_dsp(void){
         break;
     }
 
-    // if (dequeue_len > FIR_DEQUEUE_MAX_LEN) {
-    //   dequeue_len = FIR_DEQUEUE_MAX_LEN;
+    // if (dequeue_len > HB_DEQUEUE_MAX_LEN) {
+    //   dequeue_len = HB_DEQUEUE_MAX_LEN;
     // }
 
     // printf("%3d\n", buf_length);
@@ -377,33 +370,33 @@ void core1_main_dsp(void){
 
     // int32_tをfloatに変換
     for (int i = 0; i < sample; i++){
-      fir_temp_b_l[i] = (float)i2s_buf_l[i] * gain_l;
-      fir_temp_b_r[i] = (float)i2s_buf_r[i] * gain_r;
+      hb_temp_b_l[i] = (float)i2s_buf_l[i] * gain_l;
+      hb_temp_b_r[i] = (float)i2s_buf_r[i] * gain_r;
     }
 
     if (input_sample_rate_hz <= 48000){
       // インターポレーション
-      hb_interp2x_f32_8x_1st(fir_temp_b_l, fir_temp_b_r, fir_temp_a_l, fir_temp_a_r);
-      hb_interp2x_f32_8x_2nd(fir_temp_a_l, fir_temp_a_r, fir_temp_b_l, fir_temp_b_r);
-      hb_interp2x_f32_8x_3rd(fir_temp_b_l, fir_temp_b_r, fir_temp_a_l, fir_temp_a_r);
+      hb_interp2x_f32_x8_1st(hb_temp_b_l, hb_temp_b_r, hb_temp_a_l, hb_temp_a_r);
+      hb_interp2x_f32_x8_2nd(hb_temp_a_l, hb_temp_a_r, hb_temp_b_l, hb_temp_b_r);
+      hb_interp2x_f32_x8_3rd(hb_temp_b_l, hb_temp_b_r, hb_temp_a_l, hb_temp_a_r);
       sample *= 8;
 
       // floatをint32_tに変換
       for (int i = 0; i < sample; i++){
-        i2s_buf_l[i] = (int32_t)fir_temp_a_l[i];
-        i2s_buf_r[i] = (int32_t)fir_temp_a_r[i];
+        i2s_buf_l[i] = (int32_t)hb_temp_a_l[i];
+        i2s_buf_r[i] = (int32_t)hb_temp_a_r[i];
       }
     }
     else{
       // インターポレーション
-      hb_interp2x_f32_4x_1st(fir_temp_b_l, fir_temp_b_r, fir_temp_a_l, fir_temp_a_r);
-      hb_interp2x_f32_4x_2nd(fir_temp_a_l, fir_temp_a_r, fir_temp_b_l, fir_temp_b_r);
+      hb_interp2x_f32_x4_1st(hb_temp_b_l, hb_temp_b_r, hb_temp_a_l, hb_temp_a_r);
+      hb_interp2x_f32_x4_2nd(hb_temp_a_l, hb_temp_a_r, hb_temp_b_l, hb_temp_b_r);
       sample *= 4;
 
       // floatをint32_tに変換
       for (int i = 0; i < sample; i++){
-        i2s_buf_l[i] = (int32_t)fir_temp_b_l[i];
-        i2s_buf_r[i] = (int32_t)fir_temp_b_r[i];
+        i2s_buf_l[i] = (int32_t)hb_temp_b_l[i];
+        i2s_buf_r[i] = (int32_t)hb_temp_b_r[i];
       }
     }
 

@@ -90,13 +90,7 @@ uint8_t current_resolution;
 // void audio_task(void);
 void core1_main(void);
 
-#define TUD_TASK_INTERVAL_US      250
 #define DEQUEUE_MAX_LEN   (CFG_TUD_AUDIO_FUNC_1_MAX_SAMPLE_RATE_FS / 2000 + 1)
-
-__isr bool __time_critical_func(tud_timer_callback)(__unused struct repeating_timer *t) {
-  tud_task();
-  return true;
-}
 
 /*------------- MAIN -------------*/
 int main(void) {
@@ -121,14 +115,9 @@ int main(void) {
 
   TU_LOG1("Speaker running\r\n");
 
-  // tud_task()とaudio_task()を実行するタイマ
-  static struct repeating_timer tud_timer;
-  alarm_pool_t* low_prio_pool = alarm_pool_create_with_unused_hardware_alarm(1);
-  uint irq_num = hardware_alarm_get_irq_num(alarm_pool_hardware_alarm_num(low_prio_pool));
-  irq_set_priority(irq_num, PICO_LOWEST_IRQ_PRIORITY);
-  alarm_pool_add_repeating_timer_us(low_prio_pool, -TUD_TASK_INTERVAL_US, tud_timer_callback, NULL, &tud_timer);
-
-  while (1) __wfi();
+  while (1) {
+    tud_task();
+  }
 }
 
 //--------------------------------------------------------------------+

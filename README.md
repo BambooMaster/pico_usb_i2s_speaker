@@ -5,24 +5,11 @@ USBスタックには、[tinyusb](https://github.com/hathach/tinyusb.git)を使�
 
 ## Interpolation 機能
 RP2350のDSPを使用したインターポレーション（オーバーサンプリング）機能を実装しています。
-RP2350のデュアルコアを活かし、高性能なフィルタを実装したものが[interpolation](https://github.com/BambooMaster/pico_usb_i2s_speaker/tree/interpolation)ブランチ、シングルコアのみで実装をしたものが[interpolation-lite](https://github.com/BambooMaster/pico_usb_i2s_speaker/tree/interpolation-lite)ブランチです。
+ハーフバンドFIRフィルタを実装し、352.8/384kHzにインターポレートします。
+[interpolation-fir](https://github.com/BambooMaster/pico_usb_i2s_speaker/tree/interpolation-fir)ブランチで利用できます（開発中）。
 
-### インターポレーション倍率
-- **44.1/48kHz**: **8倍**
-- **88.2/96kHz**: **4倍**
-
-### フィルタ特性 (44.1KHz)
-#### interpolation ブランチ
-- Passband: **20.5kHz**
-- Passband Ripple: **0.001dB**
-- Stopband: **22.05kHz**
-- Stopband Attenuation: **-140dB**
-
-#### interpolation-lite ブランチ
-- Passband: **20kHz**
-- Passband Ripple: **0.002dB**
-- Stopband: **24.1kHz**
-- Stopband Attenuation: **-100dB**
+従来のCMSIS-DSPを使用した実装（interpolationとinterpolation-lite）は[interpolation-fir](https://github.com/BambooMaster/pico_usb_i2s_speaker/tree/interpolation-fir)に置き換わりました。
+ブランチ名を[archive/interpolation-cmsis-dualcore](https://github.com/BambooMaster/pico_usb_i2s_speaker/tree/archive/interpolation-cmsis-dualcore)と[archive/interpolation-cmsis-singlecore](https://github.com/BambooMaster/pico_usb_i2s_speaker/tree/archive/interpolation-cmsis-singlecore)に変更し保管しています。
 
 ## i2s
 [pico-i2s-pio](https://github.com/BambooMaster/pico-i2s-pio.git)を使っています。RP2040/RP2350のシステムクロックをMCLKの整数倍に設定し、pioのフラクショナル分周を使わないlowジッタモードを搭載しています。  

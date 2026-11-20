@@ -128,7 +128,7 @@ int main(void) {
   irq_set_priority(irq_num, PICO_LOWEST_IRQ_PRIORITY);
   alarm_pool_add_repeating_timer_us(low_prio_pool, -TUD_TASK_INTERVAL_US, tud_timer_callback, NULL, &tud_timer);
 
-  while (1) __wfi;
+  while (1) __wfi();
 }
 
 //--------------------------------------------------------------------+
